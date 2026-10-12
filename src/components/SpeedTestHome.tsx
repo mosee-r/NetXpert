@@ -136,7 +136,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
       <WorkloadSuitability activities={report?.activities} />
 
       {/* 5. Bufferbloat & Advanced Telemetry Breakdown */}
-      {report && (advancedMode || report.rawMeasurements.loadedLatency.loadedDeltaMs !== null) && (
+      {report && advancedMode && (
         <DetailedTestBreakdown report={report} />
       )}
     </div>

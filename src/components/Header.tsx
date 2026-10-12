@@ -73,12 +73,13 @@ export const Header: React.FC<HeaderProps> = ({
           {/* Simple vs Advanced Toggle */}
           <button
             onClick={onToggleAdvancedMode}
+            aria-pressed={advancedMode}
             className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
               advancedMode
                 ? 'bg-indigo-600/25 border-indigo-500/60 text-indigo-300 glow-indigo'
                 : 'bg-[#0E1A2E] border-white/10 text-slate-300 hover:bg-[#15253D]'
             }`}
-            title="Toggle between Simple and Advanced Diagnostics Mode"
+            title={advancedMode ? 'Switch to Simple Diagnostics Mode' : 'Switch to Advanced Diagnostics Mode'}
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
             <span className="hidden sm:inline font-mono">{advancedMode ? 'Advanced' : 'Simple'}</span>
