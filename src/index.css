@@ -1,0 +1,70 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --bg-app: #070F1E;
+    --surface: #0E1A2E;
+    --surface-elevated: #15253D;
+    --border-subtle: rgba(255, 255, 255, 0.08);
+    --border-focus: rgba(39, 215, 242, 0.40);
+    --accent-cyan: #27D7F2;
+    --accent-indigo: #536DFE;
+    --accent-purple: #8C52FF;
+    --success: #00E676;
+    --warning: #FFB300;
+    --danger: #FF5252;
+  }
+
+  body {
+    background-color: var(--bg-app);
+    color: #F4F8FC;
+    font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Inter", sans-serif;
+    overflow-x: hidden;
+  }
+}
+
+/* Tabular figures for rapid metric tickers without horizontal jitter */
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Ambient glow accents */
+.glow-cyan {
+  box-shadow: 0 0 25px -4px rgba(39, 215, 242, 0.35);
+}
+
+.glow-cyan-sm {
+  box-shadow: 0 0 12px -2px rgba(39, 215, 242, 0.3);
+}
+
+.glow-indigo {
+  box-shadow: 0 0 25px -4px rgba(83, 109, 254, 0.35);
+}
+
+.glow-ambient {
+  box-shadow: 0 0 45px -8px rgba(39, 215, 242, 0.25), 0 0 25px -6px rgba(83, 109, 254, 0.2);
+}
+
+/* Micro border cards */
+.card-micro {
+  background-color: #0E1A2E;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 18px;
+}
+
+.card-micro-elevated {
+  background-color: #15253D;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 18px;
+}
+
+/* Smooth pulse animation */
+@keyframes pulse-slow {
+  0%, 100% { opacity: 0.9; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(1.03); }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
