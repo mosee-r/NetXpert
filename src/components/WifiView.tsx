@@ -79,7 +79,7 @@ export const WifiView: React.FC<WifiViewProps> = ({ networkInfo, onAssessClick }
           <span>Android & Browser Platform Telemetry Transparency</span>
         </div>
         <p className="text-slate-400 leading-relaxed">
-          Standard Web sandboxes do not have direct access to native Android <code>WifiManager.getScanResults()</code> or hardware BSSID registers, which require <code>ACCESS_FINE_LOCATION</code> and native OS privileges. NetXpert never fabricates fake RSSI dBm signal graphs. For exact link speeds and loaded latency, run the guided network assessment.
+          Standard Web sandboxes do not have direct access to native Android <code>WifiManager.getScanResults()</code> or hardware BSSID registers, which require <code>ACCESS_FINE_LOCATION</code> and native OS privileges. SpeedXpat never fabricates fake RSSI dBm signal graphs. For exact link speeds and loaded latency, run the guided network assessment.
         </p>
       </div>
 

@@ -1,5 +1,5 @@
 /**
- * NetXpert — Full-Stack Server
+ * SpeedXpat — Full-Stack Server
  * Provides dedicated diagnostics endpoints for ping, download, upload, and DNS lookup,
  * and mounts Vite development middleware.
  */
@@ -27,7 +27,7 @@ async function startServer() {
   }
 
   app.listen(PORT, () => {
-    console.log(`NetXpert server listening on port ${PORT}`);
+    console.log(`SpeedXpat server listening on port ${PORT}`);
   });
 }
 

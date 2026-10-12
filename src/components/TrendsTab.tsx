@@ -50,13 +50,13 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
           },${h.overallRating}`
       ),
     ];
-    downloadFile(csvRows.join('\n'), `netxpert-history-${Date.now()}.csv`, 'text/csv');
+    downloadFile(csvRows.join('\n'), `speedxpat-history-${Date.now()}.csv`, 'text/csv');
   };
 
   const handleExportJson = () => {
     if (history.length === 0) return;
     const json = JSON.stringify(history, null, 2);
-    downloadFile(json, `netxpert-history-${Date.now()}.json`, 'application/json');
+    downloadFile(json, `speedxpat-history-${Date.now()}.json`, 'application/json');
   };
 
   return (

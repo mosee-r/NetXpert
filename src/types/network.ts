@@ -1,6 +1,6 @@
 /**
- * NetXpert — Shared Network Data Contracts
- * Compliant with NETXPERT_SPEC.md Section 8
+ * SpeedXpat — Shared Network Data Contracts
+ * Compliant with SPEEDXPAT_SPEC.md Section 8
  */
 
 export type TestStatus =

@@ -1,6 +1,6 @@
 /**
- * NetXpert — Professional PDF Report Generator
- * Compliant with NETXPERT_SPEC.md Section 5.13 using jsPDF
+ * SpeedXpat — Professional PDF Report Generator
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.13 using jsPDF
  * Includes comprehensive ISP details, performance metrics, and activity suitability scores.
  */
 
@@ -29,7 +29,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.setTextColor(39, 215, 242); // Cyan #27D7F2
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
-  doc.text('NetXpert Network Diagnostic Report', margin + 6, y + 9);
+  doc.text('SpeedXpat Network Diagnostic Report', margin + 6, y + 9);
 
   // Subtitle / Date
   doc.setTextColor(142, 158, 175); // Slate #8E9EAF
@@ -275,7 +275,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.setFontSize(6.5);
   doc.setTextColor(142, 158, 175);
   doc.text(
-    'NetXpert Network Diagnostics Engine • Research-grade open measurement via Measurement Lab ndt7 and local diagnostic probes. Data stored strictly on local device.',
+    'SpeedXpat Network Diagnostics Engine • Research-grade open measurement via Measurement Lab ndt7 and local diagnostic probes. Data stored strictly on local device.',
     margin,
     footerY
   );
@@ -295,5 +295,5 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
 export function downloadPdfReport(report: OverallAssessmentReport): void {
   const doc = generatePdfReport(report);
   const cleanId = report.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-  doc.save(`NetXpert-Report-${cleanId}.pdf`);
+  doc.save(`SpeedXpat-Report-${cleanId}.pdf`);
 }

@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
           </div>
           <div>
             <div className="flex items-center space-x-2">
-              <span className="text-lg font-extrabold tracking-tight text-white">NetXpert</span>
+              <span className="text-lg font-extrabold tracking-tight text-white">SpeedXpat</span>
               {/* Status Dot: Green = Internet Verified, Amber = Captive/No Internet, Red = Disconnected */}
               <span
                 className={`w-2.5 h-2.5 rounded-full ${

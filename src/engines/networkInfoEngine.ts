@@ -1,6 +1,6 @@
 /**
- * NetXpert — Network Information & Diagnostics Adapter
- * Compliant with NETXPERT_SPEC.md Section 5.2, 5.10, 5.11
+ * SpeedXpat — Network Information & Diagnostics Adapter
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.2, 5.10, 5.11
  *
  * Inspects device network status via standard Network Information API,
  * accurately labels limitations, and never fakes unsupported hardware metrics.

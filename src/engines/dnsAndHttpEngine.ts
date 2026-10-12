@@ -1,6 +1,6 @@
 /**
- * NetXpert — DNS & HTTP Connection Timing Engine
- * Compliant with NETXPERT_SPEC.md Section 5.12
+ * SpeedXpat — DNS & HTTP Connection Timing Engine
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.12
  *
  * Measures DNS lookup speed and phase-separated HTTP waterfall timing (DNS, TCP, TLS, TTFB).
  */

@@ -246,7 +246,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectReportToView }
                       onClick={(e) => {
                         e.stopPropagation();
                         const csv = exportReportToCsv(item);
-                        downloadFile(csv, `netxpert-${item.id}.csv`, 'text/csv');
+                        downloadFile(csv, `speedxpat-${item.id}.csv`, 'text/csv');
                       }}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
                       title="Export CSV"
@@ -257,7 +257,7 @@ export const HistoryView: React.FC<HistoryViewProps> = ({ onSelectReportToView }
                       onClick={(e) => {
                         e.stopPropagation();
                         const json = JSON.stringify(item, null, 2);
-                        downloadFile(json, `netxpert-${item.id}.json`, 'application/json');
+                        downloadFile(json, `speedxpat-${item.id}.json`, 'application/json');
                       }}
                       className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700"
                       title="Export JSON"

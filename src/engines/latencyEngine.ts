@@ -1,6 +1,6 @@
 /**
- * NetXpert — Latency & Jitter Measurement Engine
- * Compliant with NETXPERT_SPEC.md Section 5.4
+ * SpeedXpat — Latency & Jitter Measurement Engine
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.4
  *
  * Measures multi-sample round-trip time, calculates min/median/avg/max and RFC 3550 jitter.
  * Never labels HTTPS timing as raw ICMP ping.

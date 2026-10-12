@@ -1,5 +1,5 @@
 /**
- * NetXpert — Measurement Lab (M-Lab) NDT7 Service
+ * SpeedXpat — Measurement Lab (M-Lab) NDT7 Service
  * Powered by open M-Lab Locate API & NDT7 WebSocket Protocol
  * (https://github.com/m-lab/ndt7-client-go / https://github.com/m-lab/locate)
  */

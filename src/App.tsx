@@ -1,6 +1,6 @@
 /**
- * NetXpert — Android Network Diagnostics & Capability Engine
- * Compliant with NETXPERT_UI_SPEC.md
+ * SpeedXpat — Android Network Diagnostics & Capability Engine
+ * Compliant with SPEEDXPAT_UI_SPEC.md
  */
 
 import React, { useState, useEffect, useRef } from 'react';
@@ -24,10 +24,22 @@ import {
 } from './services/storage';
 import { triggerHaptic } from './utils/haptics';
 
+const ADVANCED_MODE_KEY = 'speedxpat_advanced_mode';
+const LEGACY_ADVANCED_MODE_KEY = 'netxpert_advanced_mode';
+
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTabType>('speed');
   const [advancedMode, setAdvancedMode] = useState<boolean>(() => {
-    return localStorage.getItem('netxpert_advanced_mode') === 'true';
+    const storedValue = localStorage.getItem(ADVANCED_MODE_KEY);
+    if (storedValue !== null) return storedValue === 'true';
+
+    const legacyValue = localStorage.getItem(LEGACY_ADVANCED_MODE_KEY);
+    if (legacyValue !== null) {
+      localStorage.setItem(ADVANCED_MODE_KEY, legacyValue);
+      return legacyValue === 'true';
+    }
+
+    return false;
   });
 
   const [networkInfo, setNetworkInfo] = useState<DeviceNetworkInfo | null>(null);
@@ -109,7 +121,7 @@ export default function App() {
   const handleToggleAdvancedMode = () => {
     setAdvancedMode((prev) => {
       const next = !prev;
-      localStorage.setItem('netxpert_advanced_mode', String(next));
+      localStorage.setItem(ADVANCED_MODE_KEY, String(next));
       return next;
     });
   };

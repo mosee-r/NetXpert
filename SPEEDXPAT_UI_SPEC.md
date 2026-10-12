@@ -1,7 +1,7 @@
-# NetXpert — Detailed UI/UX Specification
+# SpeedXpat — Detailed UI/UX Specification
 
 **Document type:** Product, Interface, and Technical UX Specification  
-**Product:** NetXpert Android Network Diagnostics App  
+**Product:** SpeedXpat Android Network Diagnostics App
 **Platform:** Android First; React Native / React + TypeScript  
 **Design Reference:** Ubiquiti WiFiman, Cloudflare Speed Test, Meteor by OpenSignal.
 

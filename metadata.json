@@ -1,5 +1,5 @@
 {
-  "name": "NetXpert",
+  "name": "SpeedXpat",
   "description": "Network diagnostics and evidence-based activity capability assessment for gaming, streaming, video calls, browsing, and remote work.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]

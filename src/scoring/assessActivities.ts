@@ -1,6 +1,6 @@
 /**
- * NetXpert — Activity Capability Assessment Engine
- * Compliant with NETXPERT_SPEC.md Section 5.6, 5.7, 5.8, 5.9
+ * SpeedXpat — Activity Capability Assessment Engine
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.6, 5.7, 5.8, 5.9
  *
  * Deterministic scoring engine with requirement gates.
  * Never treats missing measurements as passing.

@@ -1,6 +1,6 @@
 /**
- * NetXpert — Assessment Orchestration Engine
- * Compliant with NETXPERT_SPEC.md Section 9
+ * SpeedXpat — Assessment Orchestration Engine
+ * Compliant with SPEEDXPAT_SPEC.md Section 9
  *
  * Coordinates guided sequential assessment with cancellation, timeouts,
  * progress updates, and deterministic activity capability scoring.

@@ -180,7 +180,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </span>
         </div>
         <p className="text-xs text-slate-400 leading-relaxed">
-          NetXpert implements transparent requirement gates rather than opaque averages. For example, gaming ratings require both low base latency (≤ 65 ms) and low bufferbloat (≤ +70 ms under load); high download bandwidth never masks severe jitter or bufferbloat.
+          SpeedXpat implements transparent requirement gates rather than opaque averages. For example, gaming ratings require both low base latency (≤ 65 ms) and low bufferbloat (≤ +70 ms under load); high download bandwidth never masks severe jitter or bufferbloat.
         </p>
 
         <div className="text-xs font-mono space-y-1.5 text-slate-400 bg-slate-800/40 p-3 rounded-xl border border-slate-800">

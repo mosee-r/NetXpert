@@ -190,7 +190,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         <div>
           <span className="font-semibold text-amber-300 block mb-0.5">Android Location (GPS) Telemetry Notice</span>
           <p className="leading-relaxed text-slate-300">
-            On Android 10+ (API 29+), system Location Services must be toggled on for applications to read raw Wi-Fi SSIDs and BSSID hardware MAC addresses. NetXpert never collects GPS coordinates or tracks user location.
+            On Android 10+ (API 29+), system Location Services must be toggled on for applications to read raw Wi-Fi SSIDs and BSSID hardware MAC addresses. SpeedXpat never collects GPS coordinates or tracks user location.
           </p>
         </div>
       </div>

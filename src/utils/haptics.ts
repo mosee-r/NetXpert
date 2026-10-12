@@ -1,6 +1,6 @@
 /**
- * NetXpert — Haptic Feedback Engine
- * Compliant with Section 3.5 of NETXPERT_UI_SPEC.md
+ * SpeedXpat — Haptic Feedback Engine
+ * Compliant with Section 3.5 of SPEEDXPAT_UI_SPEC.md
  * Uses Web Vibration API when available on Android / mobile browsers.
  */
 

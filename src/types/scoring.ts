@@ -1,6 +1,6 @@
 /**
- * NetXpert — Activity Scoring & Capability Assessment Contracts
- * Compliant with NETXPERT_SPEC.md Section 5.6 and Section 8.4
+ * SpeedXpat — Activity Scoring & Capability Assessment Contracts
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.6 and Section 8.4
  */
 
 import {

@@ -1,6 +1,6 @@
 /**
- * NetXpert — Local History & Report Export Service
- * Compliant with NETXPERT_SPEC.md Section 5.13 & Section 12
+ * SpeedXpat — Local History & Report Export Service
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.13 & Section 12
  *
  * Stores test runs locally with zero cloud dependencies, supports comparison,
  * and generates clean JSON and CSV exports.
@@ -8,7 +8,8 @@
 
 import { OverallAssessmentReport } from '../types/scoring';
 
-const STORAGE_KEY = 'netxpert_assessment_history_v1';
+const STORAGE_KEY = 'speedxpat_assessment_history_v1';
+const LEGACY_STORAGE_KEY = 'netxpert_assessment_history_v1';
 
 export function saveAssessmentReport(report: OverallAssessmentReport): void {
   try {
@@ -23,8 +24,11 @@ export function saveAssessmentReport(report: OverallAssessmentReport): void {
 
 export function getAssessmentHistory(): OverallAssessmentReport[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY);
     if (!raw) return [];
+    if (!localStorage.getItem(STORAGE_KEY)) {
+      localStorage.setItem(STORAGE_KEY, raw);
+    }
     return JSON.parse(raw) as OverallAssessmentReport[];
   } catch {
     return [];
@@ -49,6 +53,7 @@ export function deleteAssessment(id: string): void {
 export function clearAllHistory(): void {
   try {
     localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch (err) {
     console.error('Failed to clear history:', err);
   }
@@ -61,7 +66,7 @@ export { downloadPdfReport } from './pdfReportGenerator';
  */
 export function exportReportToCsv(report: OverallAssessmentReport): string {
   const rows: string[][] = [
-    ['NetXpert Network Diagnostic Report'],
+    ['SpeedXpat Network Diagnostic Report'],
     ['Report ID', report.id],
     ['Timestamp', report.timestamp],
     ['App Version', report.appVersion],

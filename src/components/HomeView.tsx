@@ -41,13 +41,13 @@ export const HomeView: React.FC<HomeViewProps> = ({
   const handleExportCsv = () => {
     if (!report) return;
     const csv = exportReportToCsv(report);
-    downloadFile(csv, `netxpert-report-${Date.now()}.csv`, 'text/csv');
+    downloadFile(csv, `speedxpat-report-${Date.now()}.csv`, 'text/csv');
   };
 
   const handleExportJson = () => {
     if (!report) return;
     const json = JSON.stringify(report, null, 2);
-    downloadFile(json, `netxpert-report-${Date.now()}.json`, 'application/json');
+    downloadFile(json, `speedxpat-report-${Date.now()}.json`, 'application/json');
   };
 
   return (
@@ -68,7 +68,7 @@ export const HomeView: React.FC<HomeViewProps> = ({
               Does your internet actually handle what you need?
             </h1>
             <p className="text-sm sm:text-base text-slate-300 mb-6 leading-relaxed">
-              NetXpert tests more than raw speed. Run a guided diagnostic to receive evidence-based verdicts for <strong>gaming</strong>, <strong>4K streaming</strong>, <strong>video calls</strong>, <strong>browsing</strong>, and <strong>remote work</strong>.
+              SpeedXpat tests more than raw speed. Run a guided diagnostic to receive evidence-based verdicts for <strong>gaming</strong>, <strong>4K streaming</strong>, <strong>video calls</strong>, <strong>browsing</strong>, and <strong>remote work</strong>.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">

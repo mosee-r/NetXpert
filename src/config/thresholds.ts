@@ -1,5 +1,5 @@
 /**
- * NetXpert — Configurable Activity Thresholds & Heuristics
+ * SpeedXpat — Configurable Activity Thresholds & Heuristics
  * Version: v1.0.0-2026
  *
  * NOTE: These threshold values are configurable product heuristics based on industry

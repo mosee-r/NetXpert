@@ -1,6 +1,6 @@
 /**
- * NetXpert — Loaded Latency & Bufferbloat Measurement Engine
- * Compliant with NETXPERT_SPEC.md Section 5.5
+ * SpeedXpat — Loaded Latency & Bufferbloat Measurement Engine
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.5
  *
  * Measures baseline latency, latency under concurrent controlled network load,
  * and post-load latency to quantify bufferbloat and router queue congestion.

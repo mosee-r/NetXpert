@@ -80,7 +80,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-bold text-white">Diagnostics & Test Settings</h2>
-              <span className="text-[11px] text-slate-400 font-mono">NetXpert v1.0 • Engine {SCORING_RULE_VERSION}</span>
+              <span className="text-[11px] text-slate-400 font-mono">SpeedXpat v1.0 • Engine {SCORING_RULE_VERSION}</span>
             </div>
           </div>
           <button
@@ -228,7 +228,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 text-[11px] text-slate-400 flex items-start space-x-2.5">
             <ShieldCheck className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <p className="leading-relaxed">
-              <strong>Zero-Telemetry Guarantee:</strong> NetXpert stores all assessment history locally on your device. No user tracking, no personal location logging, and no external advertising networks.
+              <strong>Zero-Telemetry Guarantee:</strong> SpeedXpat stores all assessment history locally on your device. No user tracking, no personal location logging, and no external advertising networks.
             </p>
           </div>
         </div>

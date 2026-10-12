@@ -17,7 +17,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
   app.listen(PORT, () => {
-    console.log(`NetXpert server listening on port ${PORT}`);
+    console.log(`SpeedXpat server listening on port ${PORT}`);
   });
 }
 startServer();

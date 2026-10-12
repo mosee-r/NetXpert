@@ -76,7 +76,7 @@ export const CellularView: React.FC<CellularViewProps> = ({ networkInfo, onAsses
           <span>Cellular Hardware Metrics (RSRP, RSRQ, SINR, Cell ID)</span>
         </div>
         <p className="text-slate-400 leading-relaxed">
-          Detailed cellular radio metrics such as Reference Signal Received Power (RSRP), Reference Signal Received Quality (RSRQ), Signal-to-Interference-plus-Noise Ratio (SINR), and physical Cell ID require native Android <code>TelephonyManager.getAllCellInfo()</code> calls with <code>READ_PHONE_STATE</code> permission. NetXpert strictly adheres to our core principle: <em>Never invent or silently substitute fake radio metrics.</em>
+          Detailed cellular radio metrics such as Reference Signal Received Power (RSRP), Reference Signal Received Quality (RSRQ), Signal-to-Interference-plus-Noise Ratio (SINR), and physical Cell ID require native Android <code>TelephonyManager.getAllCellInfo()</code> calls with <code>READ_PHONE_STATE</code> permission. SpeedXpat strictly adheres to our core principle: <em>Never invent or silently substitute fake radio metrics.</em>
         </p>
       </div>
 

@@ -1,6 +1,6 @@
 /**
- * NetXpert — Throughput Measurement Engine (Download & Upload)
- * Compliant with NETXPERT_SPEC.md Section 5.3
+ * SpeedXpat — Throughput Measurement Engine (Download & Upload)
+ * Compliant with SPEEDXPAT_SPEC.md Section 5.3
  *
  * Measures actual transferred bytes over timed intervals.
  * Reports Mbps (megabits per second) and bytesTransferred accurately.
