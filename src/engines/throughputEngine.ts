@@ -7,6 +7,7 @@
  */
 
 import { ThroughputSummary, ThroughputSample, TestStatus } from '../types/network';
+import { createDownloadTestUrl, createRequestTimeout } from './testEndpoints';
 
 export interface ThroughputTestOptions {
   targetUrl: string;
@@ -34,6 +35,7 @@ export async function measureThroughput(
   let bytesTransferred = 0;
   let status: TestStatus = 'success';
   let errorMessage: string | undefined;
+  let requestTimedOut = false;
 
   const limitations = [
     'Throughput measured over HTTP stream with byte accounting. Subject to server endpoint capacity, route peering, and browser memory limits.',
@@ -42,78 +44,80 @@ export async function measureThroughput(
   try {
     if (direction === 'download') {
       // Chunked streaming download
-      const sep = targetUrl.includes('?') ? '&' : '?';
-      const url = `${targetUrl}${sep}_t=${Date.now()}&size=${maxBytes}`;
+      const url = createDownloadTestUrl(targetUrl, maxBytes, { _t: String(Date.now()) });
+      const requestTimeout = createRequestTimeout(signal, durationTargetMs + 15_000);
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          cache: 'no-store',
+          signal: requestTimeout.signal,
+        });
 
-      const response = await fetch(url, {
-        method: 'GET',
-        cache: 'no-store',
-        signal,
-      });
-
-      if (!response.ok && response.status !== 206) {
-        throw new Error(`Download server returned HTTP ${response.status}`);
-      }
-
-      const reader = response.body?.getReader();
-      if (!reader) {
-        throw new Error('Response body streaming is not supported by runtime.');
-      }
-
-      let lastSampleTime = startTime;
-      let lastSampleBytes = 0;
-
-      while (true) {
-        if (signal?.aborted) {
-          status = 'cancelled';
-          try {
-            await reader.cancel();
-          } catch {
-            // ignore cancel error
-          }
-          break;
+        if (!response.ok && response.status !== 206) {
+          throw new Error(`Download server returned HTTP ${response.status}`);
         }
 
-        const { done, value } = await reader.read();
-        if (done) break;
+        const reader = response.body?.getReader();
+        if (!reader) {
+          throw new Error('Response body streaming is not supported by runtime.');
+        }
 
-        if (value) {
-          bytesTransferred += value.byteLength;
-          const now = performance.now();
-          const elapsedTotal = now - startTime;
+        let lastSampleTime = startTime;
+        let lastSampleBytes = 0;
 
-          // Record intermediate sample every 250ms
-          if (now - lastSampleTime >= 250) {
-            const chunkElapsed = (now - lastSampleTime) / 1000;
-            const chunkBytes = bytesTransferred - lastSampleBytes;
-            const instantMbps = (chunkBytes * 8) / (chunkElapsed * 1000000);
-
-            samples.push({
-              timestamp: Date.now(),
-              bytes: bytesTransferred,
-              instantMbps: Number(instantMbps.toFixed(2)),
-            });
-
-            lastSampleTime = now;
-            lastSampleBytes = bytesTransferred;
-
-            if (onProgress) {
-              const overallMbps =
-                (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
-              onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal));
-            }
-          }
-
-          // Bound by maxBytes or target duration
-          if (bytesTransferred >= maxBytes || elapsedTotal >= durationTargetMs) {
+        while (true) {
+          if (signal?.aborted) {
             try {
               await reader.cancel();
             } catch {
               // ignore
             }
+            status = 'cancelled';
             break;
           }
+
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          if (value) {
+            bytesTransferred += value.byteLength;
+            const now = performance.now();
+            const elapsedTotal = now - startTime;
+
+            if (now - lastSampleTime >= 250) {
+              const chunkElapsed = (now - lastSampleTime) / 1000;
+              const chunkBytes = bytesTransferred - lastSampleBytes;
+              const instantMbps = (chunkBytes * 8) / (chunkElapsed * 1000000);
+
+              samples.push({
+                timestamp: Date.now(),
+                bytes: bytesTransferred,
+                instantMbps: Number(instantMbps.toFixed(2)),
+              });
+
+              lastSampleTime = now;
+              lastSampleBytes = bytesTransferred;
+
+              if (onProgress) {
+                const overallMbps =
+                  (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
+                onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal));
+              }
+            }
+
+            if (bytesTransferred >= maxBytes || elapsedTotal >= durationTargetMs) {
+              try {
+                await reader.cancel();
+              } catch {
+                // ignore
+              }
+              break;
+            }
+          }
         }
+      } finally {
+        requestTimedOut ||= requestTimeout.didTimeout();
+        requestTimeout.dispose();
       }
     } else {
       // Upload throughput test
@@ -139,16 +143,22 @@ export async function measureThroughput(
 
         const uploadUrl = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}upload_t=${Date.now()}`;
         const chunkStart = performance.now();
-
-        const res = await fetch(uploadUrl, {
-          method: 'POST',
-          body: chunkData,
-          headers: {
-            'Content-Type': 'application/octet-stream',
-          },
-          cache: 'no-store',
-          signal,
-        });
+        const requestTimeout = createRequestTimeout(signal, 15_000);
+        let res: Response;
+        try {
+          res = await fetch(uploadUrl, {
+            method: 'POST',
+            body: chunkData,
+            headers: {
+              'Content-Type': 'application/octet-stream',
+            },
+            cache: 'no-store',
+            signal: requestTimeout.signal,
+          });
+        } finally {
+          requestTimedOut ||= requestTimeout.didTimeout();
+          requestTimeout.dispose();
+        }
 
         if (!res.ok) {
           throw new Error(`Upload endpoint returned HTTP ${res.status}`);
@@ -185,7 +195,9 @@ export async function measureThroughput(
       status = 'cancelled';
     } else {
       status = 'failed';
-      errorMessage = String(err);
+      errorMessage = requestTimedOut
+        ? 'The network request timed out. Check your connection and try again.'
+        : String(err);
     }
   }
 

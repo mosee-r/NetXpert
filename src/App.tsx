@@ -23,9 +23,55 @@ import {
   clearAllHistory,
 } from './services/storage';
 import { triggerHaptic } from './utils/haptics';
+import { getDefaultTestEndpoints, isAndroidNativeApp } from './engines/testEndpoints';
 
 const ADVANCED_MODE_KEY = 'speedxpat_advanced_mode';
 const LEGACY_ADVANCED_MODE_KEY = 'netxpert_advanced_mode';
+const defaultTestEndpoints = getDefaultTestEndpoints();
+
+function validateTestSettings(
+  pingTarget: string,
+  downloadTarget: string,
+  uploadTarget: string,
+  dnsDomain: string
+): string | null {
+  const endpoints = [
+    ['Ping', pingTarget],
+    ['Download', downloadTarget],
+    ['Upload', uploadTarget],
+  ] as const;
+
+  for (const [label, value] of endpoints) {
+    try {
+      const url = new URL(value.trim(), window.location.origin);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+        return `${label} target must be an HTTP or HTTPS URL without embedded credentials.`;
+      }
+      if (isAndroidNativeApp() && (url.protocol !== 'https:' || url.origin === window.location.origin)) {
+        return `${label} target on Android must use a public HTTPS endpoint.`;
+      }
+    } catch {
+      return `${label} target is not a valid URL. Check Diagnostics & Test Settings.`;
+    }
+  }
+
+  try {
+    const domainUrl = new URL(`https://${dnsDomain.trim()}`);
+    if (
+      !domainUrl.hostname ||
+      domainUrl.pathname !== '/' ||
+      domainUrl.search ||
+      domainUrl.hash ||
+      domainUrl.port
+    ) {
+      return 'DNS target must be a domain name without a path, port, or query.';
+    }
+  } catch {
+    return 'DNS target is invalid. Enter a domain name such as cloudflare.com.';
+  }
+
+  return null;
+}
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTabType>('speed');
@@ -50,12 +96,13 @@ export default function App() {
     const list = getAssessmentHistory();
     return list.length > 0 ? list[0] : null;
   });
+  const initialDownloadMbps = currentReport?.rawMeasurements.downloadThroughput.mbps;
 
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [pingTarget, setPingTarget] = useState('/api/ping');
-  const [downloadTarget, setDownloadTarget] = useState('/api/speedtest/download');
-  const [uploadTarget, setUploadTarget] = useState('/api/speedtest/upload');
+  const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
+  const [downloadTarget, setDownloadTarget] = useState(defaultTestEndpoints.download);
+  const [uploadTarget, setUploadTarget] = useState(defaultTestEndpoints.upload);
   const [dnsDomain, setDnsDomain] = useState('cloudflare.com');
   const [maxDownloadMb, setMaxDownloadMb] = useState(8);
   const [maxUploadMb, setMaxUploadMb] = useState(4);
@@ -68,11 +115,23 @@ export default function App() {
   const [testStage, setTestStage] = useState<AssessmentStage>('idle');
   const [stageName, setStageName] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
+  const [appError, setAppError] = useState<string | null>(null);
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
 
   // Hero Gauge Counter State
-  const [heroValue, setHeroValue] = useState('0');
+  const [heroValue, setHeroValue] = useState(
+    initialDownloadMbps !== null && initialDownloadMbps !== undefined
+      ? initialDownloadMbps.toFixed(1)
+      : '0'
+  );
   const [heroUnit, setHeroUnit] = useState('Mbps');
-  const [heroLabel, setHeroLabel] = useState('TEST READY');
+  const [heroLabel, setHeroLabel] = useState(
+    initialDownloadMbps !== null && initialDownloadMbps !== undefined
+      ? 'DOWNLOAD SPEED'
+      : currentReport
+      ? 'NO DOWNLOAD RESULT'
+      : 'TEST READY'
+  );
 
   // Real-time Sparkline & Matrix updates
   const [sparklineData, setSparklineData] = useState<number[]>([]);
@@ -87,6 +146,23 @@ export default function App() {
   const orchestratorRef = useRef<AssessmentOrchestrator | null>(null);
   const lastPhaseRef = useRef<string>('');
 
+  useEffect(() => {
+    const downloadMbps = currentReport?.rawMeasurements.downloadThroughput.mbps;
+    if (downloadMbps !== null && downloadMbps !== undefined) {
+      setHeroValue(downloadMbps.toFixed(1));
+      setHeroUnit('Mbps');
+      setHeroLabel('DOWNLOAD SPEED');
+    } else if (currentReport) {
+      setHeroValue('0');
+      setHeroUnit('Mbps');
+      setHeroLabel('NO DOWNLOAD RESULT');
+    } else {
+      setHeroValue('0');
+      setHeroUnit('Mbps');
+      setHeroLabel('TEST READY');
+    }
+  }, [currentReport]);
+
   // Initial network info detection & listeners
   useEffect(() => {
     let mounted = true;
@@ -94,19 +170,23 @@ export default function App() {
       if (mounted) setNetworkInfo(info);
     });
 
-    const handleOnline = () => {
+    const handleNetworkChange = () => {
+      setIsOnline(navigator.onLine);
       detectNetworkInfo().then((info) => {
         if (mounted) setNetworkInfo(info);
       });
     };
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOnline);
+    const handleNativeNetworkRefresh = () => handleNetworkChange();
+    window.addEventListener('online', handleNetworkChange);
+    window.addEventListener('offline', handleNetworkChange);
+    window.addEventListener('speedxpat-network-refresh', handleNativeNetworkRefresh);
 
     return () => {
       mounted = false;
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOnline);
+      window.removeEventListener('online', handleNetworkChange);
+      window.removeEventListener('offline', handleNetworkChange);
+      window.removeEventListener('speedxpat-network-refresh', handleNativeNetworkRefresh);
     };
   }, []);
 
@@ -128,7 +208,20 @@ export default function App() {
 
   // Start Guided Assessment
   const handleStartTest = async () => {
+    const validationError = validateTestSettings(
+      pingTarget,
+      downloadTarget,
+      uploadTarget,
+      dnsDomain
+    );
+    if (validationError) {
+      setActiveTab('speed');
+      setAppError(validationError);
+      return;
+    }
+
     triggerHaptic('start');
+    setAppError(null);
     setIsTesting(true);
     setActiveTab('speed');
     setSparklineData([]);
@@ -204,7 +297,9 @@ export default function App() {
       });
 
       triggerHaptic('success');
-      saveAssessmentReport(report);
+      if (!saveAssessmentReport(report)) {
+        setAppError('The test completed, but its report could not be saved. Free device storage and try again.');
+      }
       setCurrentReport(report);
       refreshHistory();
 
@@ -215,8 +310,17 @@ export default function App() {
         setHeroUnit('Mbps');
         setHeroLabel('DOWNLOAD SPEED');
       }
-    } catch {
+    } catch (error: unknown) {
       triggerHaptic('error');
+      if (!String(error).toLowerCase().includes('cancel')) {
+        setTestStage('failed');
+        setHeroLabel('TEST FAILED');
+        setAppError(
+          navigator.onLine
+            ? 'The assessment could not finish. Check your connection and test targets, then try again.'
+            : 'The assessment stopped because your device is offline. Reconnect and try again.'
+        );
+      }
     } finally {
       setIsTesting(false);
       orchestratorRef.current = null;
@@ -264,6 +368,31 @@ export default function App() {
 
       {/* 2. Main Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-4">
+        {!isOnline && (
+          <div
+            role="status"
+            aria-live="polite"
+            className="mb-4 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm text-amber-200"
+          >
+            Your device reports no network connection. Saved reports remain available; diagnostics need a connection.
+          </div>
+        )}
+        {appError && (
+          <div
+            role="alert"
+            className="mb-4 flex items-start justify-between gap-3 rounded-xl border border-rose-500/30 bg-rose-950/40 px-4 py-3 text-sm text-rose-200"
+          >
+            <span>{appError}</span>
+            <button
+              type="button"
+              onClick={() => setAppError(null)}
+              className="shrink-0 text-rose-300 hover:text-white"
+              aria-label="Dismiss error message"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
         {activeTab === 'speed' && (
           <SpeedTestHome
             networkInfo={networkInfo}
@@ -281,6 +410,7 @@ export default function App() {
             useMlab={useMlab}
             onStartTest={handleStartTest}
             onCancelTest={handleCancelTest}
+            onExportError={() => setAppError('The report could not be exported. Check available storage and try again.')}
           />
         )}
 
@@ -302,6 +432,7 @@ export default function App() {
             history={history}
             onDeleteReport={handleDeleteReport}
             onClearAllHistory={handleClearAllHistory}
+            onExportError={() => setAppError('The report could not be exported. Check available storage and try again.')}
             onInspectReport={(rep) => {
               setCurrentReport(rep);
               setActiveTab('speed');

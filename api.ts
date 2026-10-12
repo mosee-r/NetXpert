@@ -46,11 +46,16 @@ app.post('/api/speedtest/upload', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
 
   let bytesReceived = 0;
+  let exceedsLimit = false;
   req.on('data', (chunk) => {
     bytesReceived += chunk.length;
+    if (bytesReceived > 30 * 1024 * 1024) exceedsLimit = true;
   });
 
   req.on('end', () => {
+    if (exceedsLimit) {
+      return res.status(413).json({ ok: false, error: 'Upload exceeds the 30 MB limit.' });
+    }
     res.json({
       ok: true,
       bytesReceived,
@@ -92,16 +97,19 @@ app.get('/api/dns/lookup', async (req, res) => {
 app.get('/api/network/isp', async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 5_000);
   try {
     const ipinfoRes = await fetch('https://ipinfo.io/json', {
       headers: { Accept: 'application/json' },
+      signal: controller.signal,
     });
     if (ipinfoRes.ok) {
       const data = await ipinfoRes.json();
       const orgStr = data.org || '';
       const asnMatch = orgStr.match(/^(AS\d+)\s*(.*)$/);
       const asn = asnMatch ? asnMatch[1] : (orgStr.startsWith('AS') ? orgStr.split(' ')[0] : '');
-      const isp = asnMatch && asnMatch[2] ? asnMatch[2] : (orgStr.replace(asn, '').trim() || 'Internet Provider');
+      const isp = asnMatch && asnMatch[2] ? asnMatch[2] : orgStr.replace(asn, '').trim();
 
       return res.json({
         ok: true,
@@ -116,29 +124,10 @@ app.get('/api/network/isp', async (_req, res) => {
       });
     }
   } catch {
-    // Fall back to the secondary provider.
+    // The client displays unavailable ISP details when the provider cannot be reached.
+  } finally {
+    clearTimeout(timeoutId);
   }
 
-  try {
-    const apiRes = await fetch('http://ip-api.com/json/');
-    if (apiRes.ok) {
-      const data = await apiRes.json();
-      const asMatch = (data.as || '').match(/^(AS\d+)/);
-      return res.json({
-        ok: true,
-        ip: data.query,
-        isp: data.isp || data.org,
-        asn: asMatch ? asMatch[1] : '',
-        org: data.org || data.as,
-        city: data.city,
-        region: data.regionName,
-        country: data.country,
-        source: 'ip-api.com',
-      });
-    }
-  } catch {
-    // Fall back to an unavailable result.
-  }
-
-  res.json({ ok: false });
+  res.status(502).json({ ok: false, error: 'ISP lookup is temporarily unavailable.' });
 });

@@ -7,6 +7,11 @@
  */
 
 import { DeviceNetworkInfo, NetworkType } from '../types/network';
+import {
+  createRequestTimeout,
+  getAndroidNativeBridge,
+  isAndroidNativeApp,
+} from './testEndpoints';
 
 interface NetworkInformationNavigator extends Navigator {
   connection?: {
@@ -29,16 +34,31 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
   let downlinkMbps: number | undefined = undefined;
   let rttMs: number | undefined = undefined;
   let saveData: boolean | undefined = undefined;
+  let wifiSsid: string | undefined = undefined;
 
   const limitations: string[] = [
     'Cellular radio metrics (RSRP, RSRQ, SINR, Cell ID) and low-level Wi-Fi BSSID/RSSI require native Android Telephony & WifiManager permissions not exposed in web sandboxes.',
   ];
 
-  if (conn) {
+  try {
+    const androidNative = getAndroidNativeBridge();
+    if (androidNative) {
+      const ssid = androidNative.getWifiSsid();
+      if (ssid) {
+        wifiSsid = ssid;
+        networkType = 'wifi';
+      }
+      const nType = androidNative.getNetworkType();
+      if (nType && nType !== 'unknown') {
+        networkType = nType as NetworkType;
+      }
+    }
+  } catch {}
+
+  if (conn && networkType === 'unknown') {
     if (conn.type === 'wifi') networkType = 'wifi';
     else if (conn.type === 'cellular') networkType = 'cellular';
     else if (conn.type === 'ethernet') networkType = 'ethernet';
-    else if (conn.type) networkType = 'unknown';
 
     effectiveType = conn.effectiveType;
     downlinkMbps = conn.downlink;
@@ -57,10 +77,17 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
 
   // 1. Primary lookup: direct ipinfo.io lookup (resolves true client edge IP & ASN)
   try {
-    const ipinfoRes = await fetch('https://ipinfo.io/json', {
-      headers: { Accept: 'application/json' },
-      cache: 'no-store',
-    }).catch(() => null);
+    const requestTimeout = createRequestTimeout(undefined, 4_000);
+    let ipinfoRes: Response | null;
+    try {
+      ipinfoRes = await fetch('https://ipinfo.io/json', {
+        headers: { Accept: 'application/json' },
+        cache: 'no-store',
+        signal: requestTimeout.signal,
+      }).catch(() => null);
+    } finally {
+      requestTimeout.dispose();
+    }
 
     if (ipinfoRes && ipinfoRes.ok) {
       const data = await ipinfoRes.json();
@@ -78,7 +105,7 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
         asn = parts[0];
         ispName = parts.slice(1).join(' ') || parts[0];
       } else {
-        ispName = orgStr || 'Identified ISP';
+        ispName = orgStr || undefined;
       }
 
       locationCity = data.city;
@@ -90,9 +117,18 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
   }
 
   // 2. Secondary lookup via backend resolver /api/network/isp if client-side was blocked
-  if (!ispName || !ipAddress) {
+  if (!isAndroidNativeApp() && (!ispName || !ipAddress)) {
     try {
-      const res = await fetch('/api/network/isp', { cache: 'no-store' }).catch(() => null);
+      const requestTimeout = createRequestTimeout(undefined, 4_000);
+      let res: Response | null;
+      try {
+        res = await fetch('/api/network/isp', {
+          cache: 'no-store',
+          signal: requestTimeout.signal,
+        }).catch(() => null);
+      } finally {
+        requestTimeout.dispose();
+      }
       if (res && res.ok) {
         const data = await res.json();
         if (data.ok) {
@@ -113,9 +149,16 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
   // 3. Fallback for IP if third-party providers failed
   if (!ipAddress) {
     try {
-      const res = await fetch('https://api.ipify.org?format=json', {
-        cache: 'no-store',
-      }).catch(() => null);
+      const requestTimeout = createRequestTimeout(undefined, 4_000);
+      let res: Response | null;
+      try {
+        res = await fetch('https://api.ipify.org?format=json', {
+          cache: 'no-store',
+          signal: requestTimeout.signal,
+        }).catch(() => null);
+      } finally {
+        requestTimeout.dispose();
+      }
       if (res && res.ok) {
         const data = await res.json();
         ipAddress = data.ip;
@@ -139,6 +182,7 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
     locationCity,
     locationRegion,
     locationCountry,
+    wifiSsid,
     limitations,
   };
 }

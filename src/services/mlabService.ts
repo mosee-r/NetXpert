@@ -5,14 +5,15 @@
  */
 
 import { ThroughputSummary, ThroughputSample, TestStatus } from '../types/network';
+import { createRequestTimeout } from '../engines/testEndpoints';
 
 export interface MlabServerInfo {
   machine: string;
   hostname: string;
   city: string;
   country: string;
-  downloadUrl: string;
-  uploadUrl: string;
+  downloadUrl?: string;
+  uploadUrl?: string;
   label: string;
 }
 
@@ -31,10 +32,16 @@ export async function locateNearestMlabServer(
   }
 
   try {
-    const res = await fetch('https://locate.measurementlab.net/v2/nearest/ndt/ndt7', {
-      headers: { Accept: 'application/json' },
-      signal,
-    });
+    const requestTimeout = createRequestTimeout(signal, 8_000);
+    let res: Response;
+    try {
+      res = await fetch('https://locate.measurementlab.net/v2/nearest/ndt/ndt7', {
+        headers: { Accept: 'application/json' },
+        signal: requestTimeout.signal,
+      });
+    } finally {
+      requestTimeout.dispose();
+    }
 
     if (!res.ok) {
       throw new Error(`M-Lab Locate API returned HTTP ${res.status}`);
@@ -47,12 +54,8 @@ export async function locateNearestMlabServer(
       throw new Error('No M-Lab servers returned from locate service.');
     }
 
-    const downloadUrl =
-      result.urls?.['wss:///ndt/v7/download'] ||
-      result.urls?.['ws:///ndt/v7/download'];
-    const uploadUrl =
-      result.urls?.['wss:///ndt/v7/upload'] ||
-      result.urls?.['ws:///ndt/v7/upload'];
+    const downloadUrl = getSecureWebSocketUrl(result.urls?.['wss:///ndt/v7/download']);
+    const uploadUrl = getSecureWebSocketUrl(result.urls?.['wss:///ndt/v7/upload']);
 
     const serverInfo: MlabServerInfo = {
       machine: result.machine || '',
@@ -70,6 +73,15 @@ export async function locateNearestMlabServer(
   } catch (err) {
     console.warn('M-Lab Locate failed, falling back to local diagnostic server:', err);
     return null;
+  }
+
+  function getSecureWebSocketUrl(value: unknown): string | undefined {
+    if (typeof value !== 'string') return undefined;
+    try {
+      return new URL(value).protocol === 'wss:' ? value : undefined;
+    } catch {
+      return undefined;
+    }
   }
 }
 

@@ -14,10 +14,13 @@ import { measureLatency } from '../engines/latencyEngine';
 import { measureDnsTiming, measureHttpTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
 import { LatencySummary, DnsTimingResult, HttpTimingResult, LoadedLatencySummary } from '../types/network';
+import { getDefaultTestEndpoints } from '../engines/testEndpoints';
 
 export const ToolsView: React.FC = () => {
+  const defaultTestEndpoints = getDefaultTestEndpoints();
+
   // Tool 1: Latency Ping Probe State
-  const [pingTarget, setPingTarget] = useState('/api/ping');
+  const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
   const [pingSamples, setPingSamples] = useState(8);
   const [isPinging, setIsPinging] = useState(false);
   const [pingResult, setPingResult] = useState<LatencySummary | null>(null);
@@ -28,7 +31,7 @@ export const ToolsView: React.FC = () => {
   const [dnsResult, setDnsResult] = useState<DnsTimingResult | null>(null);
 
   // Tool 3: HTTP Waterfall Timing State
-  const [httpTarget, setHttpTarget] = useState('/api/ping');
+  const [httpTarget, setHttpTarget] = useState(defaultTestEndpoints.ping);
   const [isTestingHttp, setIsTestingHttp] = useState(false);
   const [httpResult, setHttpResult] = useState<HttpTimingResult | null>(null);
 
@@ -83,8 +86,8 @@ export const ToolsView: React.FC = () => {
     setBloatResult(null);
     try {
       const res = await measureLoadedLatency({
-        pingTargetUrl: '/api/ping',
-        loadTargetUrl: '/api/speedtest/download',
+        pingTargetUrl: defaultTestEndpoints.ping,
+        loadTargetUrl: defaultTestEndpoints.download,
       });
       setBloatResult(res);
     } catch {
@@ -310,6 +313,7 @@ export const ToolsView: React.FC = () => {
             </div>
           )}
         </div>
+
       </div>
     </div>
   );

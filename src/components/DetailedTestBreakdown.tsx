@@ -154,7 +154,7 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
           <div>Target Server: <span className="text-slate-200">{downloadThroughput.target}</span></div>
           <div>Probe Method: <span className="text-slate-200">{idleLatency.method}</span></div>
           <div>ISP Provider: <span className="text-emerald-300">{networkInfo.ispName || networkInfo.asnOrg || 'Detected ISP'}</span></div>
-          <div>Region: <span className="text-slate-200">{[networkInfo.locationCity, networkInfo.locationCountry].filter(Boolean).join(', ') || 'Global Region'}</span></div>
+          <div>Region: <span className="text-slate-200">{[networkInfo.locationCity, networkInfo.locationCountry].filter(Boolean).join(', ') || 'Not available'}</span></div>
           <div>Public IP: <span className="text-cyan-300">{networkInfo.ipAddress || 'Not recorded'}</span></div>
           <div>Link Profile: <span className="text-slate-200 capitalize">{networkInfo.networkType}</span></div>
         </div>

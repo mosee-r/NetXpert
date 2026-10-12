@@ -10,6 +10,7 @@ import {
   Sliders,
 } from 'lucide-react';
 import { SCORING_RULE_VERSION } from '../config/thresholds';
+import { getDefaultTestEndpoints } from '../engines/testEndpoints';
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -59,9 +60,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   if (!isOpen) return null;
 
   const handleReset = () => {
-    setPingTarget('/api/ping');
-    setDownloadTarget('/api/speedtest/download');
-    setUploadTarget('/api/speedtest/upload');
+    const defaultEndpoints = getDefaultTestEndpoints();
+    setPingTarget(defaultEndpoints.ping);
+    setDownloadTarget(defaultEndpoints.download);
+    setUploadTarget(defaultEndpoints.upload);
     setDnsDomain('cloudflare.com');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);

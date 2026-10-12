@@ -6,6 +6,7 @@
 
 import { jsPDF } from 'jspdf';
 import { OverallAssessmentReport } from '../types/scoring';
+import { getAndroidNativeBridge } from '../engines/testEndpoints';
 
 export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   const doc = new jsPDF({
@@ -295,5 +296,15 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
 export function downloadPdfReport(report: OverallAssessmentReport): void {
   const doc = generatePdfReport(report);
   const cleanId = report.id.replace(/[^a-zA-Z0-9_-]/g, '_');
-  doc.save(`SpeedXpat-Report-${cleanId}.pdf`);
+  const filename = `SpeedXpat-Report-${cleanId}.pdf`;
+  const androidNative = getAndroidNativeBridge();
+  if (androidNative) {
+    const pdfData = doc.output('datauristring').split(',', 2)[1];
+    if (!pdfData || !androidNative.saveFile(filename, 'application/pdf', pdfData, true)) {
+      throw new Error('Android could not start the PDF report export.');
+    }
+    return;
+  }
+
+  doc.save(filename);
 }

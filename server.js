@@ -1,6 +1,7 @@
 import { createServer as createViteServer } from "vite";
 import express from "express";
 import path from "path";
+import "dotenv/config";
 import { app } from "./api";
 const PORT = process.env.PORT || 3e3;
 async function startServer() {

@@ -31,14 +31,21 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
 }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [clipboardError, setClipboardError] = useState(false);
+  const [refreshError, setRefreshError] = useState(false);
 
   const isWifi = networkInfo?.networkType === 'wifi' || networkInfo?.networkType === 'unknown';
   const isCellular = networkInfo?.networkType === 'cellular';
 
-  const copyToClipboard = (key: string, val: string) => {
-    navigator.clipboard.writeText(val);
-    setCopiedKey(key);
-    setTimeout(() => setCopiedKey(null), 1500);
+  const copyToClipboard = async (key: string, val: string) => {
+    try {
+      await navigator.clipboard.writeText(val);
+      setClipboardError(false);
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 1500);
+    } catch {
+      setClipboardError(true);
+    }
   };
 
   const handleRefresh = async () => {
@@ -46,6 +53,9 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
       setIsRefreshing(true);
       try {
         await onRefreshNetworkInfo();
+        setRefreshError(false);
+      } catch {
+        setRefreshError(true);
       } finally {
         setTimeout(() => setIsRefreshing(false), 500);
       }
@@ -55,6 +65,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
   // Find recent Wi-Fi and Cellular runs from history for side-by-side comparison
   const recentWifiRun = history.find((h) => h.networkInfo.networkType === 'wifi');
   const recentCellularRun = history.find((h) => h.networkInfo.networkType === 'cellular');
+  const unavailable = networkInfo ? 'Not available' : 'Checking...';
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-20">
@@ -73,15 +84,22 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         </div>
 
         {onRefreshNetworkInfo && (
-          <button
-            onClick={handleRefresh}
-            disabled={isRefreshing}
-            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 text-xs font-medium text-slate-300 hover:text-cyan-300 transition-all cursor-pointer disabled:opacity-50"
-            title="Refresh network information and perform live ipinfo.io lookup"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
-            <span>{isRefreshing ? 'Resolving...' : 'Refresh Network'}</span>
-          </button>
+          <div className="flex flex-col items-end gap-1">
+            <button
+              onClick={handleRefresh}
+              disabled={isRefreshing}
+              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 text-xs font-medium text-slate-300 hover:text-cyan-300 transition-all cursor-pointer disabled:opacity-50"
+              title="Refresh network information and perform live ipinfo.io lookup"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />
+              <span>{isRefreshing ? 'Resolving...' : 'Refresh Network'}</span>
+            </button>
+            {refreshError && (
+              <span role="alert" className="text-[10px] text-rose-300">
+                Network details could not be refreshed.
+              </span>
+            )}
+          </div>
         )}
       </div>
 
@@ -104,21 +122,21 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
             <span className="text-[10px] text-slate-400 block uppercase">ISP Provider</span>
             <span className="text-sm font-bold text-emerald-400 truncate block" title={networkInfo?.ispName}>
-              {networkInfo?.ispName || 'Resolving...'}
+              {networkInfo?.ispName || unavailable}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
             <span className="text-[10px] text-slate-400 block uppercase">Autonomous System</span>
             <span className="text-sm font-bold text-cyan-300 truncate block" title={networkInfo?.asn}>
-              {networkInfo?.asn || 'AS396982'}
+              {networkInfo?.asn || unavailable}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
             <span className="text-[10px] text-slate-400 block uppercase">Public IP Address</span>
             <span className="text-sm font-bold text-indigo-300 truncate block" title={networkInfo?.ipAddress}>
-              {networkInfo?.ipAddress || 'Resolving...'}
+              {networkInfo?.ipAddress || unavailable}
             </span>
           </div>
 
@@ -128,7 +146,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               className="text-sm font-bold text-slate-200 truncate block"
               title={`${networkInfo?.locationCity || ''}, ${networkInfo?.locationCountry || ''}`}
             >
-              {[networkInfo?.locationCity, networkInfo?.locationCountry].filter(Boolean).join(', ') || 'Global Region'}
+              {[networkInfo?.locationCity, networkInfo?.locationCountry].filter(Boolean).join(', ') || unavailable}
             </span>
           </div>
         </div>
@@ -139,17 +157,17 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             {
               key: 'isp_full',
               label: 'Internet Service Provider (ISP)',
-              val: networkInfo?.ispName || 'Google LLC',
+              val: networkInfo?.ispName,
             },
             {
               key: 'asn_full',
               label: 'Autonomous System Number (ASN)',
-              val: networkInfo?.asn || 'AS396982',
+              val: networkInfo?.asn,
             },
             {
               key: 'asn_org_full',
               label: 'ASN Organization / Routing Registry',
-              val: networkInfo?.asnOrg || 'AS396982 Google LLC',
+              val: networkInfo?.asnOrg,
             },
             {
               key: 'geo_location',
@@ -157,7 +175,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               val:
                 [networkInfo?.locationCity, networkInfo?.locationRegion, networkInfo?.locationCountry]
                   .filter(Boolean)
-                  .join(', ') || 'Brussels, Brussels Capital, BE',
+                  .join(', ') || undefined,
             },
           ].map((row) => (
             <div
@@ -166,11 +184,12 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             >
               <div>
                 <span className="text-slate-400 block text-[11px]">{row.label}</span>
-                <span className="font-mono text-slate-200 font-semibold">{row.val}</span>
+                <span className="font-mono text-slate-200 font-semibold">{row.val || unavailable}</span>
               </div>
               <button
-                onClick={() => copyToClipboard(row.key, row.val)}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
+                onClick={() => row.val && copyToClipboard(row.key, row.val)}
+                disabled={!row.val}
+                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Copy to clipboard"
               >
                 {copiedKey === row.key ? (
@@ -181,6 +200,11 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               </button>
             </div>
           ))}
+          {clipboardError && (
+            <p role="alert" className="text-xs text-rose-300">
+              Clipboard access is unavailable. You can select and copy the value instead.
+            </p>
+          )}
         </div>
       </div>
 

@@ -20,6 +20,7 @@ interface TrendsTabProps {
   onDeleteReport: (id: string) => void;
   onClearAllHistory: () => void;
   onInspectReport: (report: OverallAssessmentReport) => void;
+  onExportError: (message: string) => void;
 }
 
 export const TrendsTab: React.FC<TrendsTabProps> = ({
@@ -27,6 +28,7 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
   onDeleteReport,
   onClearAllHistory,
   onInspectReport,
+  onExportError,
 }) => {
   const [filterType, setFilterType] = useState<'all' | 'wifi' | 'cellular'>('all');
 
@@ -50,13 +52,21 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
           },${h.overallRating}`
       ),
     ];
-    downloadFile(csvRows.join('\n'), `speedxpat-history-${Date.now()}.csv`, 'text/csv');
+    try {
+      downloadFile(csvRows.join('\n'), `speedxpat-history-${Date.now()}.csv`, 'text/csv');
+    } catch {
+      onExportError('The CSV export could not be started. Check available storage and try again.');
+    }
   };
 
   const handleExportJson = () => {
     if (history.length === 0) return;
     const json = JSON.stringify(history, null, 2);
-    downloadFile(json, `speedxpat-history-${Date.now()}.json`, 'application/json');
+    try {
+      downloadFile(json, `speedxpat-history-${Date.now()}.json`, 'application/json');
+    } catch {
+      onExportError('The JSON export could not be started. Check available storage and try again.');
+    }
   };
 
   return (
@@ -79,7 +89,11 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
           <div className="flex items-center space-x-2">
             <button
               onClick={() => {
-                if (history.length > 0) downloadPdfReport(history[0]);
+                try {
+                  if (history.length > 0) downloadPdfReport(history[0]);
+                } catch {
+                  onExportError('The PDF export could not be started. Check available storage and try again.');
+                }
               }}
               className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-xs font-semibold text-white shadow-md flex items-center space-x-1.5 cursor-pointer"
               title="Download PDF report of latest run"

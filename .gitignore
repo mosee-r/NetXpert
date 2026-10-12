@@ -8,4 +8,11 @@ coverage/
 !.env.example
 
 # Local Vercel folder
-.vercel
+.vercel/
+
+# Local deployment artifacts
+.vite/
+
+# Local Android release signing material
+/android/keystore.properties
+/android/signing/

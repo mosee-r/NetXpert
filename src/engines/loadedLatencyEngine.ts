@@ -8,6 +8,7 @@
 
 import { LoadedLatencySummary, TestStatus } from '../types/network';
 import { measureLatency } from './latencyEngine';
+import { createDownloadTestUrl } from './testEndpoints';
 
 export interface LoadedLatencyOptions {
   pingTargetUrl: string;
@@ -54,7 +55,7 @@ export async function measureLoadedLatency(
 
     // Launch background controlled data stream
     const loadPromise = fetch(
-      `${loadTargetUrl}${loadTargetUrl.includes('?') ? '&' : '?'}load=bufferbloat&size=5242880`,
+      createDownloadTestUrl(loadTargetUrl, 5 * 1024 * 1024, { load: 'bufferbloat' }),
       {
         cache: 'no-store',
         signal: loadController.signal,

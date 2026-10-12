@@ -13,6 +13,7 @@ import { measureThroughput } from './throughputEngine';
 import { measureLoadedLatency } from './loadedLatencyEngine';
 import { assessAllActivities } from '../scoring/assessActivities';
 import { OverallAssessmentReport } from '../types/scoring';
+import { getDefaultTestEndpoints } from './testEndpoints';
 import {
   locateNearestMlabServer,
   measureMlabThroughput,
@@ -68,9 +69,10 @@ export class AssessmentOrchestrator {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    const pingTarget = options.pingTarget || '/api/ping';
-    const downloadTarget = options.downloadTarget || '/api/speedtest/download';
-    const uploadTarget = options.uploadTarget || '/api/speedtest/upload';
+    const defaultEndpoints = getDefaultTestEndpoints();
+    const pingTarget = options.pingTarget || defaultEndpoints.ping;
+    const downloadTarget = options.downloadTarget || defaultEndpoints.download;
+    const uploadTarget = options.uploadTarget || defaultEndpoints.upload;
     const dnsDomain = options.dnsDomain || 'cloudflare.com';
     const useMlab = options.useMlab !== false;
 

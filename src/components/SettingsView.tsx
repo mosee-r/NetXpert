@@ -9,6 +9,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { THRESHOLDS, SCORING_RULE_VERSION } from '../config/thresholds';
+import { getDefaultTestEndpoints } from '../engines/testEndpoints';
 
 interface SettingsViewProps {
   pingTarget: string;
@@ -42,9 +43,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [isSaved, setIsSaved] = useState(false);
 
   const handleResetDefaults = () => {
-    setPingTarget('/api/ping');
-    setDownloadTarget('/api/speedtest/download');
-    setUploadTarget('/api/speedtest/upload');
+    const defaultEndpoints = getDefaultTestEndpoints();
+    setPingTarget(defaultEndpoints.ping);
+    setDownloadTarget(defaultEndpoints.download);
+    setUploadTarget(defaultEndpoints.upload);
     setDnsDomain('cloudflare.com');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);

@@ -55,17 +55,14 @@ export async function measureLatency(
       if (signal) signal.addEventListener('abort', abortListener, { once: true });
 
       const response = await fetch(probeUrl, {
-        method: 'HEAD',
+        method: 'GET',
+        headers: { Range: 'bytes=0-0' },
         cache: 'no-store',
-        mode: 'cors',
         signal: controller.signal,
       }).catch(async () => {
-        // Fallback to GET with Range if HEAD is rejected by server
         return await fetch(probeUrl, {
-          method: 'GET',
-          headers: { Range: 'bytes=0-0' },
+          method: 'HEAD',
           cache: 'no-store',
-          mode: 'cors',
           signal: controller.signal,
         });
       });
@@ -76,22 +73,20 @@ export async function measureLatency(
       const elapsed = Math.round(performance.now() - start);
 
       if (response && (response.ok || response.status === 206 || response.status === 304 || response.status === 204)) {
-        samples.push({ timestamp: Date.now(), latencyMs: elapsed });
-        if (onProgress) onProgress(i + 1, elapsed);
+        samples.push({ timestamp: Date.now(), latencyMs: Math.max(1, elapsed) });
+        if (onProgress) onProgress(i + 1, Math.max(1, elapsed));
       } else {
-        // Count sample with timing even if non-200, but note limitation if error
-        samples.push({ timestamp: Date.now(), latencyMs: elapsed });
-        if (onProgress) onProgress(i + 1, elapsed);
+        samples.push({ timestamp: Date.now(), latencyMs: Math.max(1, elapsed) });
+        if (onProgress) onProgress(i + 1, Math.max(1, elapsed));
       }
     } catch (err: unknown) {
       if (signal?.aborted) {
         status = 'cancelled';
         break;
       }
-      // If error occurs, probe failed
       const errStr = String(err);
       if (errStr.includes('aborted')) {
-        // single sample timeout
+        // timeout
       } else {
         errorMessage = errStr;
       }
@@ -130,8 +125,7 @@ export async function measureLatency(
       ? sorted[Math.floor(sorted.length / 2)]
       : Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2);
 
-  // RFC 3550 style jitter calculation:
-  // Jitter is the mean deviation of the differences between consecutive round-trips
+  // RFC 3550 style jitter calculation
   let jitterMs: number | null = null;
   if (rawValues.length >= 2) {
     let sumDeltas = 0;

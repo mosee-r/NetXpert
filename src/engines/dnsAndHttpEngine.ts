@@ -6,6 +6,7 @@
  */
 
 import { DnsTimingResult, HttpTimingResult, TestStatus } from '../types/network';
+import { createRequestTimeout, isAndroidNativeApp } from './testEndpoints';
 
 export async function measureDnsTiming(
   domain = 'cloudflare.com',
@@ -16,36 +17,50 @@ export async function measureDnsTiming(
   ];
 
   // Try backend resolver endpoint first if available
-  try {
-    const start = performance.now();
-    const res = await fetch(`/api/dns/lookup?domain=${encodeURIComponent(domain)}`, {
-      signal,
-    });
-    if (res.ok) {
-      const data = await res.json();
-      const elapsed = Math.round(performance.now() - start);
-      return {
-        status: 'success',
-        targetDomain: domain,
-        durationMs: data.durationMs ?? elapsed,
-        resolvedIp: data.ip,
-        method: 'Node.js System Resolver via /api/dns/lookup',
-        limitations,
-      };
+  if (!isAndroidNativeApp()) {
+    try {
+      const start = performance.now();
+      const requestTimeout = createRequestTimeout(signal, 4_000);
+      let res: Response;
+      try {
+        res = await fetch(`/api/dns/lookup?domain=${encodeURIComponent(domain)}`, {
+          signal: requestTimeout.signal,
+        });
+      } finally {
+        requestTimeout.dispose();
+      }
+      if (res.ok) {
+        const data = await res.json();
+        const elapsed = Math.round(performance.now() - start);
+        return {
+          status: 'success',
+          targetDomain: domain,
+          durationMs: data.durationMs ?? elapsed,
+          resolvedIp: data.ip,
+          method: 'Node.js System Resolver via /api/dns/lookup',
+          limitations,
+        };
+      }
+    } catch {
+      // Fall back to DoH
     }
-  } catch {
-    // Fall back to DoH
   }
 
   // Fallback: DNS-over-HTTPS via Cloudflare DoH (IETF RFC 8484 JSON)
   try {
     const start = performance.now();
     const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`;
-    const res = await fetch(dohUrl, {
-      headers: { Accept: 'application/dns-json' },
-      cache: 'no-store',
-      signal,
-    });
+    const requestTimeout = createRequestTimeout(signal, 5_000);
+    let res: Response;
+    try {
+      res = await fetch(dohUrl, {
+        headers: { Accept: 'application/dns-json' },
+        cache: 'no-store',
+        signal: requestTimeout.signal,
+      });
+    } finally {
+      requestTimeout.dispose();
+    }
 
     const elapsed = Math.round(performance.now() - start);
 

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Wifi,
   Radio,
@@ -8,6 +8,7 @@ import {
   Info,
 } from 'lucide-react';
 import { DeviceNetworkInfo } from '../types/network';
+import { getAndroidNativeBridge } from '../engines/testEndpoints';
 
 interface ConnectionContextChipProps {
   networkInfo: DeviceNetworkInfo | null;
@@ -17,6 +18,25 @@ export const ConnectionContextChip: React.FC<ConnectionContextChipProps> = ({
   networkInfo,
 }) => {
   const [showGpsTooltip, setShowGpsTooltip] = useState(false);
+  const [locationEnabled, setLocationEnabled] = useState(() => {
+    try {
+      return getAndroidNativeBridge()?.isLocationEnabled() ?? true;
+    } catch {
+      return false;
+    }
+  });
+
+  useEffect(() => {
+    const refreshLocationState = () => {
+      try {
+        setLocationEnabled(getAndroidNativeBridge()?.isLocationEnabled() ?? true);
+      } catch {
+        setLocationEnabled(false);
+      }
+    };
+    window.addEventListener('speedxpat-network-refresh', refreshLocationState);
+    return () => window.removeEventListener('speedxpat-network-refresh', refreshLocationState);
+  }, []);
 
   const isOnline = networkInfo?.online ?? true;
   const netType = networkInfo?.networkType || 'unknown';
@@ -41,7 +61,7 @@ export const ConnectionContextChip: React.FC<ConnectionContextChipProps> = ({
     netType === 'wifi'
       ? networkInfo?.wifiSsid || 'Wi-Fi (Name Protected by OS)'
       : netType === 'cellular'
-      ? networkInfo?.cellularGeneration || 'Mobile Cellular (LTE/5G)'
+      ? networkInfo?.cellularGeneration || 'Mobile Network'
       : netType === 'ethernet'
       ? 'Wired Ethernet'
       : 'Network Connected';
@@ -69,8 +89,18 @@ export const ConnectionContextChip: React.FC<ConnectionContextChipProps> = ({
               <div className="absolute left-1/2 -translate-x-1/2 bottom-full mb-2 w-64 p-2.5 rounded-xl bg-[#15253D] border border-cyan-500/40 text-[11px] text-slate-200 shadow-2xl z-50 animate-in fade-in">
                 <p className="font-semibold text-cyan-300 mb-1">Android Privacy Rule</p>
                 <p className="leading-snug text-slate-300">
-                  Android 10+ requires system Location (GPS) services to be toggled on to expose local Wi-Fi SSIDs to applications.
+                  {locationEnabled
+                    ? 'Android may hide the Wi-Fi name unless Location permission is allowed for SpeedXpat.'
+                    : 'Turn on device Location services and allow Location permission for SpeedXpat to show the Wi-Fi name.'}
                 </p>
+                {!locationEnabled && getAndroidNativeBridge() && (
+                  <button
+                    onClick={() => getAndroidNativeBridge()?.openLocationSettings()}
+                    className="mt-2 text-cyan-300 font-semibold underline"
+                  >
+                    Open Location Settings
+                  </button>
+                )}
               </div>
             )}
           </div>

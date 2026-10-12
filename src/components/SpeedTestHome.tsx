@@ -33,6 +33,7 @@ interface SpeedTestHomeProps {
   useMlab?: boolean;
   onStartTest: () => void;
   onCancelTest: () => void;
+  onExportError: (message: string) => void;
 }
 
 export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
@@ -51,6 +52,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   useMlab = true,
   onStartTest,
   onCancelTest,
+  onExportError,
 }) => {
   return (
     <div className="max-w-2xl mx-auto pb-20">
@@ -93,7 +95,13 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </span>
           </div>
           <button
-            onClick={() => downloadPdfReport(report)}
+            onClick={() => {
+              try {
+                downloadPdfReport(report);
+              } catch {
+                onExportError('The PDF could not be exported. Check available storage and try again.');
+              }
+            }}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-white font-semibold shadow-md active:scale-95 transition-all cursor-pointer"
             title="Download formatted PDF report with all metrics and activity scores"
           >

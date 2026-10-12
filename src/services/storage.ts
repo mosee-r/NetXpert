@@ -7,18 +7,21 @@
  */
 
 import { OverallAssessmentReport } from '../types/scoring';
+import { getAndroidNativeBridge } from '../engines/testEndpoints';
 
 const STORAGE_KEY = 'speedxpat_assessment_history_v1';
 const LEGACY_STORAGE_KEY = 'netxpert_assessment_history_v1';
 
-export function saveAssessmentReport(report: OverallAssessmentReport): void {
+export function saveAssessmentReport(report: OverallAssessmentReport): boolean {
   try {
     const existing = getAssessmentHistory();
     // Keep up to 50 most recent runs
     const updated = [report, ...existing.filter((r) => r.id !== report.id)].slice(0, 50);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
+    return true;
   } catch (err) {
     console.error('Failed to save assessment locally:', err);
+    return false;
   }
 }
 
@@ -166,6 +169,14 @@ export function exportReportToCsv(report: OverallAssessmentReport): string {
  * Trigger file download in browser
  */
 export function downloadFile(content: string, filename: string, mimeType: string): void {
+  const androidNative = getAndroidNativeBridge();
+  if (androidNative) {
+    if (!androidNative.saveFile(filename, mimeType, content, false)) {
+      throw new Error('Android could not start the report export.');
+    }
+    return;
+  }
+
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -12,16 +12,70 @@ import {
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
+  Wifi,
 } from 'lucide-react';
 import { measureLatency } from '../engines/latencyEngine';
 import { measureDnsTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
 import { LoadedLatencySummary } from '../types/network';
+import { getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
+
+interface WifiScanNetwork {
+  ssid: string;
+  frequencyMhz: number;
+  channel: number | null;
+  band: string;
+  signalDbm: number;
+  security: string;
+}
+
+interface WifiScanResponse {
+  status: 'success' | 'stale' | 'error';
+  scannedAt?: number;
+  networks?: WifiScanNetwork[];
+  message?: string;
+}
+
+function parseWifiScanResponse(value: string): WifiScanResponse | null {
+  try {
+    const response: unknown = JSON.parse(value);
+    if (!response || typeof response !== 'object' || !('status' in response)) return null;
+    const data = response as Record<string, unknown>;
+    if (data.status === 'error' && typeof data.message === 'string') {
+      return { status: 'error', message: data.message };
+    }
+    if (data.status !== 'success' && data.status !== 'stale') return null;
+    if (!Array.isArray(data.networks) || typeof data.scannedAt !== 'number') return null;
+
+    const networks = data.networks.filter(
+      (network): network is WifiScanNetwork =>
+        !!network &&
+        typeof network === 'object' &&
+        'ssid' in network &&
+        typeof network.ssid === 'string' &&
+        'frequencyMhz' in network &&
+        typeof network.frequencyMhz === 'number' &&
+        'band' in network &&
+        typeof network.band === 'string' &&
+        'signalDbm' in network &&
+        typeof network.signalDbm === 'number' &&
+        'security' in network &&
+        typeof network.security === 'string' &&
+        'channel' in network &&
+        (typeof network.channel === 'number' || network.channel === null)
+    );
+    return { status: data.status, scannedAt: data.scannedAt, networks };
+  } catch {
+    return null;
+  }
+}
 
 export const DiagnosticToolsTab: React.FC = () => {
+  const defaultTestEndpoints = getDefaultTestEndpoints();
+
   // Tool 1: Continuous Ping & Jitter Monitor
   const [isMonitoringPing, setIsMonitoringPing] = useState(false);
-  const [pingTarget, setPingTarget] = useState('/api/ping');
+  const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
   const [rollingPingSamples, setRollingPingSamples] = useState<number[]>([]);
   const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -35,8 +89,8 @@ export const DiagnosticToolsTab: React.FC = () => {
     { name: string; ip: string; durationMs: number | null }[]
   >([]);
 
-  // Tool 4: Local Gateway Ping (Router Distance Test)
-  const [gatewayTarget, setGatewayTarget] = useState('/api/ping');
+  // Tool 4: Remote HTTP endpoint latency
+  const [gatewayTarget, setGatewayTarget] = useState(defaultTestEndpoints.ping);
   const [isPingingGateway, setIsPingingGateway] = useState(false);
   const [gatewayResult, setGatewayResult] = useState<{
     minMs: number;
@@ -54,17 +108,85 @@ export const DiagnosticToolsTab: React.FC = () => {
     reachable: boolean;
   } | null>(null);
 
+  const [isAnalyzingWifi, setIsAnalyzingWifi] = useState(false);
+  const [wifiScanNetworks, setWifiScanNetworks] = useState<WifiScanNetwork[]>([]);
+  const [wifiScanMessage, setWifiScanMessage] = useState<string | null>(null);
+  const [wifiScanTime, setWifiScanTime] = useState<number | null>(null);
+  const wifiScanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const channelCounts = wifiScanNetworks.reduce<Record<string, number>>((counts, network) => {
+    const key = `${network.band} · Ch ${network.channel ?? 'Unknown'}`;
+    counts[key] = (counts[key] || 0) + 1;
+    return counts;
+  }, {});
+  const channelUsage = Object.entries(channelCounts).sort((a, b) => b[1] - a[1]);
+
+  useEffect(() => {
+    const handleWifiScan = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      const response = typeof detail === 'string' ? parseWifiScanResponse(detail) : null;
+      if (!response) {
+        setWifiScanMessage('The Wi-Fi scanner returned an invalid response. Please try again.');
+      } else if (response.status === 'error') {
+        setWifiScanMessage(response.message || 'The Wi-Fi scan could not be completed.');
+      } else {
+        setWifiScanNetworks(response.networks || []);
+        setWifiScanTime(response.scannedAt || null);
+        setWifiScanMessage(
+          response.status === 'stale'
+            ? 'Android could not refresh the scan; showing its last available results.'
+            : `Scan complete. ${response.networks?.length || 0} visible networks found. Results stay on this device.`
+        );
+      }
+      if (wifiScanTimeoutRef.current) clearTimeout(wifiScanTimeoutRef.current);
+      wifiScanTimeoutRef.current = null;
+      setIsAnalyzingWifi(false);
+    };
+
+    window.addEventListener('speedxpat-wifi-scan', handleWifiScan);
+    return () => {
+      window.removeEventListener('speedxpat-wifi-scan', handleWifiScan);
+      if (wifiScanTimeoutRef.current) clearTimeout(wifiScanTimeoutRef.current);
+    };
+  }, []);
+
+  const handleRunWifiScan = () => {
+    const nativeBridge = getAndroidNativeBridge();
+    if (!nativeBridge) {
+      setWifiScanMessage('Nearby Wi-Fi scanning requires the Android app; browsers do not expose Wi-Fi scan results.');
+      return;
+    }
+
+    setWifiScanMessage(null);
+    setIsAnalyzingWifi(true);
+    try {
+      const accepted = nativeBridge.scanWifiNetworks();
+      if (!accepted) {
+        setIsAnalyzingWifi(false);
+        return;
+      }
+      wifiScanTimeoutRef.current = setTimeout(() => {
+        setIsAnalyzingWifi(false);
+        setWifiScanMessage('The scan did not finish in time. Check Wi-Fi and Location settings, then try again.');
+      }, 15_000);
+    } catch {
+      setIsAnalyzingWifi(false);
+      setWifiScanMessage('The Android Wi-Fi scanner could not be reached. Restart the app and try again.');
+    }
+  };
+
   // Continuous Ping Loop
   useEffect(() => {
     if (isMonitoringPing) {
       pingIntervalRef.current = setInterval(async () => {
         const start = performance.now();
         try {
-          const res = await fetch(`${pingTarget}?_t=${Date.now()}`, {
+          const separator = pingTarget.includes('?') ? '&' : '?';
+          const probeUrl = `${pingTarget}${separator}_t=${Date.now()}`;
+          const res = await fetch(probeUrl, {
             method: 'HEAD',
             cache: 'no-store',
           }).catch(async () => {
-            return await fetch(`${pingTarget}?_t=${Date.now()}`, { cache: 'no-store' });
+            return await fetch(probeUrl, { cache: 'no-store' });
           });
           const elapsed = Math.round(performance.now() - start);
           setRollingPingSamples((prev) => [...prev.slice(-24), elapsed]);
@@ -167,6 +289,135 @@ export const DiagnosticToolsTab: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/20 space-y-3.5 shadow-xl md:col-span-2">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center space-x-2 text-cyan-400">
+              <Wifi className="w-4 h-4" />
+              <h3 className="text-sm font-bold text-white">Native Wi-Fi Analyzer</h3>
+            </div>
+            <button
+              type="button"
+              onClick={handleRunWifiScan}
+              disabled={isAnalyzingWifi}
+              className="shrink-0 px-3 py-1.5 rounded-xl bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-semibold flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            >
+              {isAnalyzingWifi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+              <span>{isAnalyzingWifi ? 'Scanning...' : 'Scan nearby Wi-Fi'}</span>
+            </button>
+          </div>
+          <p className="text-xs text-slate-400">
+            Reads Android scan results to show visible access points, band, channel, signal strength, and security.
+            Network names and scan results are processed locally; BSSIDs are not displayed or stored.
+          </p>
+
+          {wifiScanMessage && (
+            <div className="space-y-2">
+              <div
+                role="status"
+                className={`rounded-xl border px-3 py-2 text-xs ${
+                  wifiScanMessage.includes('Scan complete')
+                    ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-200'
+                    : 'border-amber-500/20 bg-amber-950/20 text-amber-200'
+                }`}
+              >
+                {wifiScanMessage}
+              </div>
+              {(wifiScanMessage.includes('Location') || wifiScanMessage.includes('permission')) && (
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={() => getAndroidNativeBridge()?.openApplicationSettings()}
+                    className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
+                  >
+                    App permissions
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => getAndroidNativeBridge()?.openLocationSettings()}
+                    className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
+                  >
+                    Device Location settings
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {wifiScanNetworks.length > 0 ? (
+            <>
+              {wifiScanTime && (
+                <p className="text-[10px] text-slate-500">
+                  Last scan: {new Date(wifiScanTime).toLocaleTimeString()}
+                </p>
+              )}
+              {channelUsage.length > 0 && (
+                <div className="rounded-xl border border-white/5 bg-slate-900/50 p-3">
+                  <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
+                    Visible access points per channel
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {channelUsage.map(([channel, count]) => (
+                      <span
+                        key={channel}
+                        className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300"
+                      >
+                        {channel}: <strong className="text-cyan-200">{count}</strong>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-2">
+                {wifiScanNetworks.map((network, index) => {
+                  const signalPercent = Math.max(0, Math.min(100, 2 * (network.signalDbm + 100)));
+                  const signalQuality =
+                    network.signalDbm >= -50 ? 'Excellent' :
+                    network.signalDbm >= -60 ? 'Good' :
+                    network.signalDbm >= -67 ? 'Fair' : 'Weak';
+                  return (
+                    <div
+                      key={`${network.ssid}-${network.frequencyMhz}-${network.security}-${index}`}
+                      className="rounded-xl border border-white/5 bg-slate-900/70 p-3"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="min-w-0 break-words text-sm font-semibold text-slate-100">{network.ssid}</span>
+                        <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-200">
+                          {network.security}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex items-center justify-between text-[11px] text-slate-400">
+                        <span>{network.band} · Ch {network.channel ?? '—'}</span>
+                        <span>{network.frequencyMhz} MHz</span>
+                      </div>
+                      <div className="mt-2 flex items-center gap-2">
+                        <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700">
+                          <div
+                            className={`h-full rounded-full ${
+                              network.signalDbm >= -60
+                                ? 'bg-emerald-400'
+                                : network.signalDbm >= -70
+                                ? 'bg-amber-400'
+                                : 'bg-rose-400'
+                            }`}
+                            style={{ width: `${signalPercent}%` }}
+                          />
+                        </div>
+                        <span className="w-20 text-right text-[10px] text-slate-300">
+                          {network.signalDbm} dBm · {signalQuality}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : !wifiScanMessage && (
+            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
+              Nearby scans require the Android app, Wi-Fi enabled, Location permission granted, and Location services on.
+            </div>
+          )}
+        </div>
+
         {/* Tool 1: Continuous Ping & Jitter Monitor */}
         <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">
           <div className="flex items-center justify-between">
@@ -244,8 +495,8 @@ export const DiagnosticToolsTab: React.FC = () => {
               setBloatSummary(null);
               try {
                 const res = await measureLoadedLatency({
-                  pingTargetUrl: '/api/ping',
-                  loadTargetUrl: '/api/speedtest/download',
+                  pingTargetUrl: defaultTestEndpoints.ping,
+                  loadTargetUrl: defaultTestEndpoints.download,
                 });
                 setBloatSummary(res);
               } finally {
@@ -320,12 +571,12 @@ export const DiagnosticToolsTab: React.FC = () => {
           )}
         </div>
 
-        {/* Tool 4: Local Gateway Ping (Router Distance Test) */}
+        {/* Tool 4: Remote HTTP endpoint latency */}
         <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-indigo-400">
               <Radio className="w-4 h-4" />
-              <h3 className="text-sm font-bold text-white">Local Gateway Ping (Wi-Fi Quality)</h3>
+              <h3 className="text-sm font-bold text-white">Remote Endpoint Latency</h3>
             </div>
             <button
               onClick={handleRunGatewayPing}
@@ -333,17 +584,17 @@ export const DiagnosticToolsTab: React.FC = () => {
               className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
             >
               {isPingingGateway ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
-              <span>Ping Gateway</span>
+              <span>Probe Endpoint</span>
             </button>
           </div>
           <p className="text-xs text-slate-400">
-            Isolates local wireless interference by measuring round-trip time directly to your router.
+            Measures HTTP round-trip time to the test endpoint; this is not a router or ICMP ping.
           </p>
 
           {gatewayResult ? (
             <div className="p-3 rounded-xl bg-slate-900 border border-white/5 font-mono text-xs space-y-1">
               <div className="flex justify-between">
-                <span className="text-slate-400">Median Gateway RTT:</span>
+                <span className="text-slate-400">Median Endpoint RTT:</span>
                 <span className="font-bold text-indigo-300">{gatewayResult.medianMs} ms</span>
               </div>
               <div className="flex justify-between text-slate-400 text-[11px]">
@@ -353,7 +604,7 @@ export const DiagnosticToolsTab: React.FC = () => {
             </div>
           ) : (
             <div className="p-4 rounded-xl bg-slate-900/40 border border-white/5 text-center text-xs text-slate-500">
-              Run test to isolate Wi-Fi lag from ISP bottlenecks.
+              Run a round-trip latency test against the configured HTTP endpoint.
             </div>
           )}
         </div>
