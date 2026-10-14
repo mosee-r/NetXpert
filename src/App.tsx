@@ -12,7 +12,7 @@ import { DiagnosticToolsTab } from './components/DiagnosticToolsTab';
 import { TrendsTab } from './components/TrendsTab';
 import { SettingsModal } from './components/SettingsModal';
 
-import { DeviceNetworkInfo } from './types/network';
+import { DeviceNetworkInfo, ThroughputChartPoint } from './types/network';
 import { OverallAssessmentReport } from './types/scoring';
 import { detectNetworkInfo } from './engines/networkInfoEngine';
 import { AssessmentOrchestrator, AssessmentProgress, AssessmentStage } from './engines/orchestrator';
@@ -31,28 +31,18 @@ const defaultTestEndpoints = getDefaultTestEndpoints();
 
 function validateTestSettings(
   pingTarget: string,
-  downloadTarget: string,
-  uploadTarget: string,
   dnsDomain: string
 ): string | null {
-  const endpoints = [
-    ['Ping', pingTarget],
-    ['Download', downloadTarget],
-    ['Upload', uploadTarget],
-  ] as const;
-
-  for (const [label, value] of endpoints) {
-    try {
-      const url = new URL(value.trim(), window.location.origin);
-      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
-        return `${label} target must be an HTTP or HTTPS URL without embedded credentials.`;
-      }
-      if (isAndroidNativeApp() && (url.protocol !== 'https:' || url.origin === window.location.origin)) {
-        return `${label} target on Android must use a public HTTPS endpoint.`;
-      }
-    } catch {
-      return `${label} target is not a valid URL. Check Diagnostics & Test Settings.`;
+  try {
+    const url = new URL(pingTarget.trim(), window.location.origin);
+    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) {
+      return 'Ping target must be an HTTP or HTTPS URL without embedded credentials.';
     }
+    if (isAndroidNativeApp() && (url.protocol !== 'https:' || url.origin === window.location.origin)) {
+      return 'Ping target on Android must use a public HTTPS endpoint.';
+    }
+  } catch {
+    return 'Ping target is not a valid URL. Check Diagnostics & Test Settings.';
   }
 
   try {
@@ -96,13 +86,13 @@ export default function App() {
     const list = getAssessmentHistory();
     return list.length > 0 ? list[0] : null;
   });
+  const [pendingReport, setPendingReport] = useState<OverallAssessmentReport | null>(null);
+  const [showResults, setShowResults] = useState(false);
   const initialDownloadMbps = currentReport?.rawMeasurements.downloadThroughput.mbps;
 
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
-  const [downloadTarget, setDownloadTarget] = useState(defaultTestEndpoints.download);
-  const [uploadTarget, setUploadTarget] = useState(defaultTestEndpoints.upload);
   const [dnsDomain, setDnsDomain] = useState('cloudflare.com');
   const [maxDownloadMb, setMaxDownloadMb] = useState(8);
   const [maxUploadMb, setMaxUploadMb] = useState(4);
@@ -134,7 +124,7 @@ export default function App() {
   );
 
   // Real-time Sparkline & Matrix updates
-  const [sparklineData, setSparklineData] = useState<number[]>([]);
+  const [sparklineData, setSparklineData] = useState<ThroughputChartPoint[]>([]);
   const [activeMetrics, setActiveMetrics] = useState<{
     downloadMbps?: number | null;
     uploadMbps?: number | null;
@@ -210,8 +200,6 @@ export default function App() {
   const handleStartTest = async () => {
     const validationError = validateTestSettings(
       pingTarget,
-      downloadTarget,
-      uploadTarget,
       dnsDomain
     );
     if (validationError) {
@@ -224,6 +212,8 @@ export default function App() {
     setAppError(null);
     setIsTesting(true);
     setActiveTab('speed');
+    setPendingReport(null);
+    setShowResults(false);
     setSparklineData([]);
     setActiveMetrics({});
     setHeroValue('0');
@@ -236,8 +226,6 @@ export default function App() {
     try {
       const report = await orchestrator.runAssessment({
         pingTarget,
-        downloadTarget,
-        uploadTarget,
         dnsDomain,
         useMlab,
         maxDownloadBytes: (dataSaverMode ? 3 : maxDownloadMb) * 1024 * 1024,
@@ -251,6 +239,7 @@ export default function App() {
           if (p.stage !== lastPhaseRef.current) {
             triggerHaptic('phase');
             lastPhaseRef.current = p.stage;
+            if (p.stage === 'measuring_upload') setSparklineData([]);
           }
 
           // Parse and update real-time telemetry readout
@@ -270,8 +259,11 @@ export default function App() {
               setHeroValue(mbps.toFixed(1));
               setHeroUnit('Mbps');
               setHeroLabel('DOWNLOAD STREAM');
-              setSparklineData((prev) => [...prev.slice(-20), mbps]);
               setActiveMetrics((prev) => ({ ...prev, downloadMbps: mbps }));
+            }
+            const throughputSample = p.throughputSample;
+            if (throughputSample) {
+              setSparklineData((prev) => [...prev.slice(-29), throughputSample]);
             }
           } else if (p.stage === 'measuring_upload') {
             const match = p.currentMetricValue?.match(/([\d.]+)\s*Mbps/);
@@ -280,8 +272,11 @@ export default function App() {
               setHeroValue(mbps.toFixed(1));
               setHeroUnit('Mbps');
               setHeroLabel('UPLOAD STREAM');
-              setSparklineData((prev) => [...prev.slice(-20), mbps]);
               setActiveMetrics((prev) => ({ ...prev, uploadMbps: mbps }));
+            }
+            const throughputSample = p.throughputSample;
+            if (throughputSample) {
+              setSparklineData((prev) => [...prev.slice(-29), throughputSample]);
             }
           } else if (p.stage === 'measuring_loaded_latency') {
             const match = p.currentMetricValue?.match(/(\d+)\s*ms/);
@@ -297,11 +292,15 @@ export default function App() {
       });
 
       triggerHaptic('success');
-      if (!saveAssessmentReport(report)) {
-        setAppError('The test completed, but its report could not be saved. Free device storage and try again.');
-      }
-      setCurrentReport(report);
-      refreshHistory();
+      setPendingReport(report);
+      setShowResults(true);
+
+      const downloadSamples = report.rawMeasurements.downloadThroughput.samples;
+      const firstDownloadTimestamp = downloadSamples[0]?.timestamp ?? 0;
+      setSparklineData(downloadSamples.map((sample) => ({
+        elapsedMs: Math.max(0, sample.timestamp - firstDownloadTimestamp),
+        mbps: sample.instantMbps,
+      })));
 
       // Set final hero readout
       const finalDl = report.rawMeasurements.downloadThroughput.mbps;
@@ -327,6 +326,24 @@ export default function App() {
     }
   };
 
+  const handleSaveAndClose = () => {
+    if (pendingReport) {
+      if (!saveAssessmentReport(pendingReport)) {
+        setAppError('The test completed, but its report could not be saved. Free device storage and try again.');
+        return;
+      }
+      setCurrentReport(pendingReport);
+      refreshHistory();
+    }
+    setPendingReport(null);
+    setShowResults(false);
+  };
+
+  const handleDiscardResults = () => {
+    setPendingReport(null);
+    setShowResults(false);
+  };
+
   const handleCancelTest = () => {
     triggerHaptic('error');
     if (orchestratorRef.current) {
@@ -334,6 +351,8 @@ export default function App() {
     }
     setIsTesting(false);
     setTestStage('idle');
+    setPendingReport(null);
+    setShowResults(false);
     setHeroLabel('TEST CANCELLED');
   };
 
@@ -351,16 +370,29 @@ export default function App() {
       clearAllHistory();
       refreshHistory();
       setCurrentReport(null);
+      setPendingReport(null);
+      setShowResults(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-[#070F1E] text-[#F4F8FC] flex flex-col font-sans selection:bg-[#27D7F2] selection:text-slate-950">
+    <div className="min-h-screen bg-app-canvas text-app-primary flex flex-col font-sans selection:bg-app-accent selection:text-white">
       {/* 1. Top App Bar */}
       <Header
         networkInfo={networkInfo}
+        activeTab={activeTab}
+        isTesting={isTesting}
+        showSpeedResults={
+          activeTab === 'speed' &&
+          showResults &&
+          (pendingReport !== null || currentReport !== null)
+        }
+        hasPendingResult={pendingReport !== null}
         advancedMode={advancedMode}
         onToggleAdvancedMode={handleToggleAdvancedMode}
+        onCancelTest={handleCancelTest}
+        onDiscardPendingResult={handleDiscardResults}
+        onRetest={handleStartTest}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHistory={() => setActiveTab('trends')}
         savedCount={history.length}
@@ -396,7 +428,8 @@ export default function App() {
         {activeTab === 'speed' && (
           <SpeedTestHome
             networkInfo={networkInfo}
-            report={currentReport}
+            report={showResults ? pendingReport ?? currentReport : null}
+            canDiscardResult={pendingReport !== null}
             isTesting={isTesting}
             stage={testStage}
             stageName={stageName}
@@ -407,9 +440,10 @@ export default function App() {
             sparklineData={sparklineData}
             activeMetrics={activeMetrics}
             advancedMode={advancedMode}
-            useMlab={useMlab}
             onStartTest={handleStartTest}
             onCancelTest={handleCancelTest}
+            onSaveAndClose={handleSaveAndClose}
+            onDiscardResults={handleDiscardResults}
             onExportError={() => setAppError('The report could not be exported. Check available storage and try again.')}
           />
         )}
@@ -435,6 +469,8 @@ export default function App() {
             onExportError={() => setAppError('The report could not be exported. Check available storage and try again.')}
             onInspectReport={(rep) => {
               setCurrentReport(rep);
+              setPendingReport(null);
+              setShowResults(true);
               setActiveTab('speed');
             }}
           />
@@ -450,10 +486,6 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         pingTarget={pingTarget}
         setPingTarget={setPingTarget}
-        downloadTarget={downloadTarget}
-        setDownloadTarget={setDownloadTarget}
-        uploadTarget={uploadTarget}
-        setUploadTarget={setUploadTarget}
         dnsDomain={dnsDomain}
         setDnsDomain={setDnsDomain}
         maxDownloadMb={maxDownloadMb}

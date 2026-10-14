@@ -12,6 +12,7 @@ export interface AndroidNativeBridge {
   openApplicationSettings(): void;
   scanWifiNetworks(): boolean;
   saveFile(filename: string, mimeType: string, content: string, base64Encoded: boolean): boolean;
+  shareFile?(filename: string, mimeType: string, content: string, base64Encoded: boolean): boolean;
 }
 
 export interface RequestTimeout {
@@ -59,18 +60,10 @@ export function isAndroidNativeApp(): boolean {
 }
 
 export function getDefaultTestEndpoints(): TestEndpoints {
-  if (isAndroidNativeApp()) {
-    return {
-      ping: 'https://speed.cloudflare.com/__down?bytes=1',
-      download: 'https://speed.cloudflare.com/__down',
-      upload: 'https://speed.cloudflare.com/__up',
-    };
-  }
-
   return {
-    ping: '/api/ping',
-    download: '/api/speedtest/download',
-    upload: '/api/speedtest/upload',
+    ping: 'https://speed.cloudflare.com/__down?bytes=1',
+    download: 'https://speed.cloudflare.com/__down',
+    upload: 'https://speed.cloudflare.com/__up',
   };
 }
 

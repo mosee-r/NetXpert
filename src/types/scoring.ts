@@ -54,12 +54,26 @@ export interface ActivityAssessment {
   scoringVersion: string;
 }
 
+export interface MlabDiagnosticsReport {
+  requested: boolean;
+  server: {
+    hostname: string;
+    city: string;
+    country: string;
+    label: string;
+  } | null;
+  lookupError?: string;
+  download?: ThroughputSummary;
+  upload?: ThroughputSummary;
+}
+
 export interface OverallAssessmentReport {
   id: string;
   timestamp: string;
   appVersion: string;
   scoringVersion: string;
   networkInfo: DeviceNetworkInfo;
+  mlabDiagnostics?: MlabDiagnosticsReport;
   headlineSummary: string;
   activities: ActivityAssessment[];
   rawMeasurements: {

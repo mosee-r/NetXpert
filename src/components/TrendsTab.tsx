@@ -95,7 +95,7 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
                   onExportError('The PDF export could not be started. Check available storage and try again.');
                 }
               }}
-              className="px-3 py-1.5 rounded-xl bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 text-xs font-semibold text-white shadow-md flex items-center space-x-1.5 cursor-pointer"
+              className="px-3 py-1.5 rounded-xl bg-app-accent hover:bg-app-accent-hover text-xs font-semibold text-white flex items-center space-x-1.5 cursor-pointer"
               title="Download PDF report of latest run"
             >
               <FileText className="w-3.5 h-3.5" />

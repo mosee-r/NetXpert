@@ -1,7 +1,13 @@
 <resources xmlns:tools="http://schemas.android.com/tools">
     <style name="Theme.SpeedXpat" parent="Theme.MaterialComponents.DayNight.NoActionBar">
-        <item name="android:statusBarColor">@android:color/black</item>
-        <item name="android:navigationBarColor">@android:color/black</item>
-        <item name="android:windowBackground">@android:color/black</item>
+        <item name="colorPrimary">@color/speedxpat_accent</item>
+        <item name="colorPrimaryVariant">@color/speedxpat_accent</item>
+        <item name="colorSecondary">@color/speedxpat_accent</item>
+        <item name="colorAccent">@color/speedxpat_accent</item>
+        <item name="android:statusBarColor">@color/speedxpat_canvas</item>
+        <item name="android:navigationBarColor">@color/speedxpat_canvas</item>
+        <item name="android:windowBackground">@color/speedxpat_canvas</item>
+        <item name="android:windowLightStatusBar">false</item>
+        <item name="android:windowLightNavigationBar">false</item>
     </style>
 </resources>

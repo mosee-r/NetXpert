@@ -12,8 +12,7 @@ export const triggerHaptic = (
   try {
     switch (type) {
       case 'start':
-        // Medium impact
-        navigator.vibrate(30);
+        navigator.vibrate(10);
         break;
       case 'phase':
         // Selection tick

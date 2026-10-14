@@ -1,176 +1,75 @@
 import React from 'react';
-import {
-  HardDriveDownload,
-  Upload,
-  Activity,
-  Gauge,
-  Waves,
-  ShieldAlert,
-} from 'lucide-react';
-import { OverallAssessmentReport } from '../types/scoring';
 
-interface KeyMetricsMatrixProps {
-  report: OverallAssessmentReport | null;
-  activeMetrics?: {
-    downloadMbps?: number | null;
-    uploadMbps?: number | null;
-    pingMs?: number | null;
-    loadedPingMs?: number | null;
-    jitterMs?: number | null;
-  };
+export interface SpeedMetrics {
+  downloadMbps: number | null;
+  uploadMbps: number | null;
+  idleLatencyMs: number | null;
+  loadedLatencyMs: number | null;
+  jitterMs: number | null;
 }
 
-export const KeyMetricsMatrix: React.FC<KeyMetricsMatrixProps> = ({
-  report,
-  activeMetrics,
+interface KeyMetricsListProps {
+  metrics: SpeedMetrics;
+  includeThroughput?: boolean;
+  additionalRows?: { label: string; value: string }[];
+}
+
+export const KeyMetricsList: React.FC<KeyMetricsListProps> = ({
+  metrics,
+  includeThroughput = true,
+  additionalRows = [],
 }) => {
-  // Download Throughput
-  const downloadVal =
-    activeMetrics?.downloadMbps !== undefined && activeMetrics?.downloadMbps !== null
-      ? `${activeMetrics.downloadMbps.toFixed(1)}`
-      : report?.rawMeasurements.downloadThroughput.mbps !== null &&
-        report?.rawMeasurements.downloadThroughput.mbps !== undefined
-      ? `${report.rawMeasurements.downloadThroughput.mbps.toFixed(1)}`
-      : '--';
-
-  // Upload Throughput
-  const uploadVal =
-    activeMetrics?.uploadMbps !== undefined && activeMetrics?.uploadMbps !== null
-      ? `${activeMetrics.uploadMbps.toFixed(1)}`
-      : report?.rawMeasurements.uploadThroughput.mbps !== null &&
-        report?.rawMeasurements.uploadThroughput.mbps !== undefined
-      ? `${report.rawMeasurements.uploadThroughput.mbps.toFixed(1)}`
-      : '--';
-
-  // Idle Ping
-  const pingVal =
-    activeMetrics?.pingMs !== undefined && activeMetrics?.pingMs !== null
-      ? `${activeMetrics.pingMs}`
-      : report?.rawMeasurements.idleLatency.medianMs !== null &&
-        report?.rawMeasurements.idleLatency.medianMs !== undefined
-      ? `${report.rawMeasurements.idleLatency.medianMs}`
-      : '--';
-
-  // Loaded Ping (Bufferbloat under load)
-  const loadedPingVal =
-    activeMetrics?.loadedPingMs !== undefined && activeMetrics?.loadedPingMs !== null
-      ? `${activeMetrics.loadedPingMs}`
-      : report?.rawMeasurements.loadedLatency.underLoadLatencyMs !== null &&
-        report?.rawMeasurements.loadedLatency.underLoadLatencyMs !== undefined
-      ? `${report.rawMeasurements.loadedLatency.underLoadLatencyMs}`
-      : '--';
-
-  // Jitter
-  const jitterVal =
-    activeMetrics?.jitterMs !== undefined && activeMetrics?.jitterMs !== null
-      ? `${activeMetrics.jitterMs}`
-      : report?.rawMeasurements.idleLatency.jitterMs !== null &&
-        report?.rawMeasurements.idleLatency.jitterMs !== undefined
-      ? `${report.rawMeasurements.idleLatency.jitterMs}`
-      : '--';
-
-  // Packet Loss
-  const packetLossVal =
-    report?.rawMeasurements.idleLatency.packetLossPercent !== null &&
-    report?.rawMeasurements.idleLatency.packetLossPercent !== undefined
-      ? `${report.rawMeasurements.idleLatency.packetLossPercent}%`
-      : '--';
-
-  const metrics = [
+  const throughputRows = [
     {
-      id: 'download',
-      label: 'DOWNLOAD',
-      value: downloadVal,
-      unit: 'Mbps',
-      icon: HardDriveDownload,
-      color: 'text-cyan-400',
+      label: 'Download',
+      value: metrics.downloadMbps === null ? '\u2014' : `${metrics.downloadMbps.toFixed(1)} Mbps`,
     },
     {
-      id: 'upload',
-      label: 'UPLOAD',
-      value: uploadVal,
-      unit: 'Mbps',
-      icon: Upload,
-      color: 'text-indigo-400',
+      label: 'Upload',
+      value: metrics.uploadMbps === null ? '\u2014' : `${metrics.uploadMbps.toFixed(1)} Mbps`,
     },
     {
-      id: 'ping',
-      label: 'IDLE PING',
-      value: pingVal,
-      unit: 'ms',
-      icon: Activity,
-      color: 'text-purple-400',
+      label: 'Idle Latency',
+      value: metrics.idleLatencyMs === null ? '\u2014' : `${metrics.idleLatencyMs.toFixed(0)} ms`,
     },
     {
-      id: 'loaded_ping',
-      label: 'LOADED PING',
-      value: loadedPingVal,
-      unit: 'ms',
-      icon: Gauge,
-      color: 'text-amber-400',
-      badge:
-        report?.rawMeasurements.loadedLatency.bufferbloatGrade &&
-        report.rawMeasurements.loadedLatency.bufferbloatGrade !== 'unknown'
-          ? `Grade ${report.rawMeasurements.loadedLatency.bufferbloatGrade}`
-          : undefined,
+      label: 'Loaded Latency',
+      value: metrics.loadedLatencyMs === null ? 'Not measured' : `${metrics.loadedLatencyMs.toFixed(0)} ms`,
     },
     {
-      id: 'jitter',
-      label: 'JITTER',
-      value: jitterVal,
-      unit: 'ms',
-      icon: Waves,
-      color: 'text-emerald-400',
-    },
-    {
-      id: 'packet_loss',
-      label: 'PACKET LOSS',
-      value: packetLossVal,
-      unit: '',
-      icon: ShieldAlert,
-      color: 'text-slate-400',
+      label: 'Jitter',
+      value: metrics.jitterMs === null ? '\u2014' : `${metrics.jitterMs.toFixed(1)} ms`,
     },
   ];
-
+  const rows = [
+    ...(includeThroughput ? throughputRows : []),
+    {
+      label: 'Idle Latency',
+      value: metrics.idleLatencyMs === null ? '\u2014' : `${metrics.idleLatencyMs.toFixed(0)} ms`,
+    },
+    {
+      label: 'Loaded Latency',
+      value: metrics.loadedLatencyMs === null ? 'Not measured' : `${metrics.loadedLatencyMs.toFixed(0)} ms`,
+    },
+    {
+      label: 'Jitter',
+      value: metrics.jitterMs === null ? '\u2014' : `${metrics.jitterMs.toFixed(1)} ms`,
+    },
+    ...additionalRows,
+  ];
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 sm:gap-3 my-4">
-      {metrics.map((m) => {
-        const Icon = m.icon;
-        const isNotMeasured = m.value === '--';
-        return (
-          <div
-            key={m.id}
-            className="p-3 sm:p-3.5 rounded-xl bg-[#0E1A2E] border border-white/10 hover:border-white/15 transition-all flex flex-col justify-between"
-          >
-            <div className="flex items-center justify-between mb-1.5">
-              <span className="text-[10px] font-mono tracking-wider font-semibold text-slate-400 flex items-center space-x-1.5">
-                <Icon className={`w-3.5 h-3.5 ${m.color}`} />
-                <span>{m.label}</span>
-              </span>
-              {m.badge && (
-                <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-amber-950/80 border border-amber-800 text-amber-300 font-bold">
-                  {m.badge}
-                </span>
-              )}
-            </div>
-
-            <div className="flex items-baseline space-x-1">
-              <span
-                className={`text-xl sm:text-2xl font-bold font-mono tabular-nums tracking-tight ${
-                  isNotMeasured ? 'text-slate-600' : 'text-[#F4F8FC]'
-                }`}
-              >
-                {m.value}
-              </span>
-              {m.unit && !isNotMeasured && (
-                <span className="text-[11px] font-medium text-slate-400 font-mono">
-                  {m.unit}
-                </span>
-              )}
-            </div>
-          </div>
-        );
-      })}
+    <div
+      className="my-6 w-full divide-y divide-app-divider border-y border-app-divider"
+      aria-label="Speed test metrics"
+    >
+      {rows.map((row) => (
+        <div key={row.label} className="flex items-center justify-between gap-4 px-1 py-3">
+          <span className="text-sm font-normal text-app-muted">{row.label}</span>
+          <span className="text-right font-mono text-sm font-semibold tabular-nums text-app-primary">
+            {row.value}
+          </span>
+        </div>
+      ))}
     </div>
   );
 };

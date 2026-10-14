@@ -7,6 +7,7 @@ import {
   Cpu,
   ShieldAlert,
   Server,
+  Globe,
   Clock,
   HardDriveDownload,
   Upload,
@@ -144,20 +145,61 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
         </div>
       </div>
 
-      {/* 3. Endpoint & Network Route Metadata */}
-      <div className="p-4 rounded-xl bg-[#15253D] border border-white/10 text-xs text-slate-300 space-y-1.5 font-mono">
-        <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider mb-1 flex items-center space-x-1.5">
-          <Server className="w-3.5 h-3.5 text-cyan-400" />
-          <span>Active Test Target Details</span>
+      <div className="space-y-3">
+        <div className="p-4 rounded-xl bg-[#15253D] border border-white/10 text-xs text-slate-300 space-y-2 font-mono">
+          <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+            <Server className="w-3.5 h-3.5 text-cyan-400" />
+            <span>Primary Speed-Test Servers</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div>Download endpoint: <span className="text-slate-200">{downloadThroughput.target}</span></div>
+            <div>Upload endpoint: <span className="text-slate-200">{uploadThroughput.target}</span></div>
+            <div>Download method: <span className="text-slate-200">{downloadThroughput.method}</span></div>
+            <div>Upload method: <span className="text-slate-200">{uploadThroughput.method}</span></div>
+          </div>
         </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-          <div>Target Server: <span className="text-slate-200">{downloadThroughput.target}</span></div>
-          <div>Probe Method: <span className="text-slate-200">{idleLatency.method}</span></div>
-          <div>ISP Provider: <span className="text-emerald-300">{networkInfo.ispName || networkInfo.asnOrg || 'Detected ISP'}</span></div>
-          <div>Region: <span className="text-slate-200">{[networkInfo.locationCity, networkInfo.locationCountry].filter(Boolean).join(', ') || 'Not available'}</span></div>
-          <div>Public IP: <span className="text-cyan-300">{networkInfo.ipAddress || 'Not recorded'}</span></div>
-          <div>Link Profile: <span className="text-slate-200 capitalize">{networkInfo.networkType}</span></div>
+
+        <div className="p-4 rounded-xl bg-[#15253D] border border-white/10 text-xs text-slate-300 space-y-2 font-mono">
+          <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+            <Globe className="w-3.5 h-3.5 text-emerald-400" />
+            <span>ISP Identity (Separate IP-to-ASN Lookup)</span>
+          </div>
+          <p className="text-[11px] text-slate-400 font-sans">
+            These details identify your public IP&apos;s network, not the speed-test server.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+            <div>ISP provider: <span className="text-emerald-300">{networkInfo.ispName || networkInfo.asnOrg || 'Not available'}</span></div>
+            <div>ASN: <span className="text-slate-200">{networkInfo.asn || 'Not available'}</span></div>
+            <div>Public IP: <span className="text-cyan-300">{networkInfo.ipAddress || 'Not recorded'}</span></div>
+            <div>ISP region: <span className="text-slate-200">{[networkInfo.locationCity, networkInfo.locationCountry].filter(Boolean).join(', ') || 'Not available'}</span></div>
+          </div>
         </div>
+
+        {report.mlabDiagnostics && (
+          <div className="p-4 rounded-xl bg-[#15253D] border border-white/10 text-xs text-slate-300 space-y-2 font-mono">
+            <div className="text-[11px] text-slate-400 font-bold uppercase tracking-wider flex items-center space-x-1.5">
+              <Activity className="w-3.5 h-3.5 text-cyan-400" />
+              <span>M-Lab Diagnostic Server & TCP Results</span>
+            </div>
+            <p className="text-[11px] text-slate-200">
+              {report.mlabDiagnostics.server?.label || report.mlabDiagnostics.lookupError || 'M-Lab server metadata unavailable'}
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+              <div>Server hostname: <span className="text-slate-200">{report.mlabDiagnostics.server?.hostname || 'Not available'}</span></div>
+              <div>Server location: <span className="text-slate-200">{[report.mlabDiagnostics.server?.city, report.mlabDiagnostics.server?.country].filter(Boolean).join(', ') || 'Not available'}</span></div>
+              <div>M-Lab download TCP RTT: <span className="text-cyan-300">{!report.mlabDiagnostics.requested ? 'Not run' : !report.mlabDiagnostics.download ? 'Unavailable' : report.mlabDiagnostics.download.tcpRttMs === undefined ? 'Not reported' : `${report.mlabDiagnostics.download.tcpRttMs} ms`}</span></div>
+              <div>M-Lab upload TCP RTT: <span className="text-cyan-300">{!report.mlabDiagnostics.requested ? 'Not run' : !report.mlabDiagnostics.upload ? 'Unavailable' : report.mlabDiagnostics.upload.tcpRttMs === undefined ? 'Not reported' : `${report.mlabDiagnostics.upload.tcpRttMs} ms`}</span></div>
+              <div>M-Lab download diagnostic: <span className="text-slate-200">{report.mlabDiagnostics.download?.mbps === null || report.mlabDiagnostics.download?.mbps === undefined ? 'Unavailable' : `${report.mlabDiagnostics.download.mbps} Mbps`}</span></div>
+              <div>M-Lab upload diagnostic: <span className="text-slate-200">{report.mlabDiagnostics.upload?.mbps === null || report.mlabDiagnostics.upload?.mbps === undefined ? 'Unavailable' : `${report.mlabDiagnostics.upload.mbps} Mbps`}</span></div>
+              {report.mlabDiagnostics.download?.errorMessage && (
+                <div className="text-amber-300">M-Lab download error: {report.mlabDiagnostics.download.errorMessage}</div>
+              )}
+              {report.mlabDiagnostics.upload?.errorMessage && (
+                <div className="text-amber-300">M-Lab upload error: {report.mlabDiagnostics.upload.errorMessage}</div>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -8,6 +8,71 @@ import { jsPDF } from 'jspdf';
 import { OverallAssessmentReport } from '../types/scoring';
 import { getAndroidNativeBridge } from '../engines/testEndpoints';
 
+function maskIpAddress(ipAddress?: string): string {
+  if (!ipAddress) return 'Not available';
+  const ipv4 = ipAddress.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (ipv4) return `${ipv4[1]}.${ipv4[2]}.${ipv4[3]}.***`;
+  if (ipAddress.includes(':')) return `${ipAddress.split(':').slice(0, 4).join(':')}:****`;
+  return 'Masked for privacy';
+}
+
+function drawThroughputChart(
+  doc: jsPDF,
+  samples: OverallAssessmentReport['rawMeasurements']['downloadThroughput']['samples'],
+  x: number,
+  y: number,
+  width: number,
+  height: number
+): void {
+  doc.setFillColor(248, 250, 252);
+  doc.setDrawColor(226, 232, 240);
+  doc.rect(x, y, width, height, 'FD');
+  const left = x + 8;
+  const right = x + width - 5;
+  const top = y + 4;
+  const bottom = y + height - 7;
+  doc.setLineWidth(0.2);
+  doc.line(left, bottom, right, bottom);
+  doc.line(left, top, left, bottom);
+
+  const validSamples = samples.filter(
+    (sample) => Number.isFinite(sample.timestamp) && Number.isFinite(sample.instantMbps) && sample.instantMbps >= 0
+  );
+  if (validSamples.length < 2) {
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7);
+    doc.setTextColor(100, 116, 139);
+    doc.text('Not enough valid download samples to draw a chart.', left + 2, top + 8);
+    return;
+  }
+
+  const firstTimestamp = validSamples[0].timestamp;
+  const lastTimestamp = validSamples[validSamples.length - 1].timestamp;
+  const elapsedRange = lastTimestamp - firstTimestamp;
+  const maxMbps = Math.max(1, ...validSamples.map((sample) => sample.instantMbps));
+  const points = validSamples.map((sample, index) => {
+    const elapsedRatio = elapsedRange > 0
+      ? (sample.timestamp - firstTimestamp) / elapsedRange
+      : index / (validSamples.length - 1);
+    return {
+      x: left + elapsedRatio * (right - left),
+      y: bottom - (sample.instantMbps / maxMbps) * (bottom - top),
+    };
+  });
+
+  doc.setDrawColor(37, 99, 235);
+  doc.setLineWidth(0.65);
+  for (let index = 1; index < points.length; index++) {
+    doc.line(points[index - 1].x, points[index - 1].y, points[index].x, points[index].y);
+  }
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(100, 116, 139);
+  doc.text('0 ms', left, y + height - 2);
+  doc.text(`${Math.max(0, elapsedRange)} ms`, right, y + height - 2, { align: 'right' });
+  doc.text(`${maxMbps.toFixed(1)} Mbps max`, right, top + 2, { align: 'right' });
+}
+
 export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   const doc = new jsPDF({
     orientation: 'portrait',
@@ -23,11 +88,11 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   let y = 14;
 
   // --- 1. Top Header Banner ---
-  doc.setFillColor(7, 15, 30); // Deep Obsidian-Navy #070F1E
+  doc.setFillColor(11, 15, 23);
   doc.rect(margin, y, contentWidth, 24, 'F');
 
   // Title
-  doc.setTextColor(39, 215, 242); // Cyan #27D7F2
+  doc.setTextColor(59, 130, 246);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(16);
   doc.text('SpeedXpat Network Diagnostic Report', margin + 6, y + 9);
@@ -77,7 +142,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
   doc.setTextColor(244, 248, 252);
-  const splitHeadline = doc.splitTextToSize(report.headlineSummary, contentWidth - 12);
+  const splitHeadline = doc.splitTextToSize(report.headlineSummary, contentWidth - 12).slice(0, 2);
   doc.text(splitHeadline, margin + 6, y + 14);
 
   y += 28;
@@ -102,7 +167,11 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.text('Internet Service Provider (ISP):', margin + 6, y + 12);
   doc.setTextColor(244, 248, 252);
   doc.setFont('helvetica', 'bold');
-  doc.text(netInfo.ispName || netInfo.asnOrg || 'Google Cloud / Local ISP', margin + 6, y + 17);
+  doc.text(netInfo.ispName || netInfo.asnOrg || 'Unknown Provider', margin + 6, y + 17);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(6.5);
+  doc.setTextColor(142, 158, 175);
+  doc.text(`ASN: ${netInfo.asn || 'Not available'}`, margin + 6, y + 21);
 
   // Column 2: IP & Geo Location
   doc.setFont('helvetica', 'normal');
@@ -110,8 +179,8 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.text('Public IP & Geography:', margin + colW + 4, y + 12);
   doc.setTextColor(244, 248, 252);
   doc.setFont('helvetica', 'bold');
-  const locStr = [netInfo.locationCity, netInfo.locationCountry].filter(Boolean).join(', ') || 'Auto-Detected Region';
-  doc.text(`${netInfo.ipAddress || 'Not Recorded'} (${locStr})`, margin + colW + 4, y + 17);
+  const locStr = [netInfo.locationCity, netInfo.locationCountry].filter(Boolean).join(', ') || 'Not available';
+  doc.text(`${maskIpAddress(netInfo.ipAddress)} (${locStr})`, margin + colW + 4, y + 17);
 
   // Column 3: Interface & Link
   doc.setFont('helvetica', 'normal');
@@ -123,6 +192,28 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
 
   y += 28;
 
+  const raw = report.rawMeasurements;
+  const formatEndpoint = (target: string) =>
+    target.replace(/^https?:\/\//, '').split(/[?#]/, 1)[0].slice(0, 58);
+  const mlab = report.mlabDiagnostics;
+  const serverDetailsHeight = 17;
+
+  doc.setFillColor(21, 37, 61);
+  doc.roundedRect(margin, y, contentWidth, serverDetailsHeight, 3, 3, 'F');
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(8.5);
+  doc.setTextColor(39, 215, 242);
+  doc.text('TEST SERVER DETAILS', margin + 5, y + 4.5);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(7);
+  doc.setTextColor(142, 158, 175);
+  const serverLocation = mlab?.server
+    ? [mlab.server.city, mlab.server.country].filter(Boolean).join(', ') || mlab.server.hostname
+    : 'Not available';
+  doc.text(`Download: ${formatEndpoint(raw.downloadThroughput.target)}  |  Upload: ${formatEndpoint(raw.uploadThroughput.target)}`.slice(0, 105), margin + 5, y + 8.5);
+  doc.text(`Test server location: ${serverLocation}`.slice(0, 105), margin + 5, y + 13);
+  y += serverDetailsHeight + 4;
+
   // --- 4. Performance Telemetry Matrix ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -130,7 +221,6 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.text('Measured Performance Metrics', margin, y);
   y += 4;
 
-  const raw = report.rawMeasurements;
   const metricsData = [
     {
       label: 'Download Speed',
@@ -168,6 +258,12 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
       detail: raw.dnsTiming.targetDomain || 'cloudflare.com',
       method: raw.dnsTiming.method,
     },
+    {
+      label: 'IP Packet Loss',
+      val: 'Not measured',
+      detail: 'HTTPS tests do not measure IP loss',
+      method: 'Not measured',
+    },
   ];
 
   // Draw 2x3 Metric Grid
@@ -200,14 +296,24 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
     doc.text(m.detail, cx + 4, cy + 16.5);
   });
 
-  y += cardH * 2 + 10;
+  const metricRowCount = Math.ceil(metricsData.length / 3);
+  y += metricRowCount * cardH + (metricRowCount - 1) * 3 + 5;
+
+  // Embedded vector chart from actual timestamped download samples.
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(9);
+  doc.setTextColor(39, 215, 242);
+  doc.text('Download Throughput Samples', margin, y);
+  y += 3;
+  drawThroughputChart(doc, raw.downloadThroughput.samples, margin, y, contentWidth, 27);
+  y += 30;
 
   // --- 5. Activity Capability & Workload Suitability Scores ---
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
   doc.setTextColor(39, 215, 242);
   doc.text('Workload & Activity Suitability Analysis', margin, y);
-  y += 4;
+  y += 3;
 
   // Table Header
   doc.setFillColor(21, 37, 61);
@@ -223,8 +329,8 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   y += 7;
 
   // Activity Rows
-  report.activities.forEach((act, idx) => {
-    const rowH = 12;
+  report.activities.slice(0, 6).forEach((act, idx) => {
+    const rowH = 6;
     const isEven = idx % 2 === 0;
     doc.setFillColor(isEven ? 14 : 9, isEven ? 26 : 19, isEven ? 46 : 38);
     doc.rect(margin, y, contentWidth, rowH, 'F');
@@ -233,11 +339,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
     doc.setTextColor(244, 248, 252);
-    doc.text(act.displayName, margin + 4, y + 5);
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(6.5);
-    doc.setTextColor(142, 158, 175);
-    doc.text(act.category, margin + 4, y + 9);
+    doc.text(act.displayName, margin + 4, y + 5.5);
 
     // Rating
     const rUpper = act.rating.toUpperCase();
@@ -247,39 +349,39 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
     else doc.setTextColor(255, 82, 82);
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(8);
-    doc.text(rUpper, margin + 50, y + 7);
+    doc.text(rUpper, margin + 50, y + 5.5);
 
     // Confidence
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(7);
     doc.setTextColor(142, 158, 175);
-    doc.text(`${act.confidence.toUpperCase()}`, margin + 74, y + 7);
+    doc.text(`${act.confidence.toUpperCase()}`, margin + 74, y + 5.5);
 
     // Bottleneck / Summary text
     const bottleneckText = act.bottlenecks.length > 0 ? `Bottleneck: ${act.bottlenecks[0]}` : act.summary;
-    const splitText = doc.splitTextToSize(bottleneckText, contentWidth - 106);
+    const splitText = doc.splitTextToSize(bottleneckText, contentWidth - 106).slice(0, 1);
     doc.setTextColor(200, 214, 229);
     doc.setFontSize(6.8);
-    doc.text(splitText, margin + 102, y + 4.5);
+    doc.text(splitText, margin + 102, y + 5.5);
 
     y += rowH;
   });
 
-  y += 5;
+  y += 3;
 
   // --- 6. Footer & Methodology Disclaimer ---
   const footerY = pageHeight - 12;
+  if (y > footerY - 8 || doc.getNumberOfPages() !== 1) {
+    throw new Error('PDF report exceeded the single-page A4 layout budget.');
+  }
   doc.setDrawColor(30, 45, 68);
   doc.line(margin, footerY - 3, pageWidth - margin, footerY - 3);
 
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(6.5);
   doc.setTextColor(142, 158, 175);
-  doc.text(
-    'SpeedXpat Network Diagnostics Engine • Research-grade open measurement via Measurement Lab ndt7 and local diagnostic probes. Data stored strictly on local device.',
-    margin,
-    footerY
-  );
+  doc.setFontSize(6);
+  doc.text('HTTP diagnostics; IP packet loss not measured. Data stored locally.', margin, footerY);
   doc.text(
     `Page 1 of 1  |  ${report.id}`,
     pageWidth - margin,

@@ -15,7 +15,12 @@ export interface ThroughputTestOptions {
   maxBytes?: number; // Safe default ~8 MB
   durationTargetMs?: number; // ~4000 ms
   signal?: AbortSignal;
-  onProgress?: (bytes: number, currentMbps: number, elapsedMs: number) => void;
+  onProgress?: (
+    bytes: number,
+    currentMbps: number,
+    elapsedMs: number,
+    sample: ThroughputSample
+  ) => void;
 }
 
 export async function measureThroughput(
@@ -101,7 +106,7 @@ export async function measureThroughput(
               if (onProgress) {
                 const overallMbps =
                   (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
-                onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal));
+                onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal), samples[samples.length - 1]);
               }
             }
 
@@ -185,7 +190,7 @@ export async function measureThroughput(
           if (onProgress) {
             const overallMbps =
               (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
-            onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal));
+            onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal), samples[samples.length - 1]);
           }
         }
       }

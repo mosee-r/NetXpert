@@ -25,8 +25,6 @@ export async function measureLoadedLatency(
     'Bufferbloat tested using HTTP-concurrent transfer load. Quantifies router queuing delay under active network traffic.',
   ];
 
-  let status: TestStatus = 'success';
-
   try {
     // Phase 1: Measure baseline idle latency (3 samples)
     if (onPhaseUpdate) onPhaseUpdate('baseline', 0);
@@ -103,7 +101,33 @@ export async function measureLoadedLatency(
       },
     });
 
+    if (signal?.aborted || postLoad.status === 'cancelled') {
+      return createCancelledSummary(limitations);
+    }
+
     const postLoadMs = postLoad.medianMs;
+    const phases = [
+      { name: 'baseline', result: baseline },
+      { name: 'under-load', result: underLoad },
+      { name: 'recovery', result: postLoad },
+    ];
+    const allPhasesComplete = phases.every(
+      ({ result }) => result.status === 'success' && result.medianMs !== null
+    );
+    const hasFailedPhase = phases.some(
+      ({ result }) => result.status === 'failed' || result.status === 'timed_out'
+    );
+    const status: TestStatus = allPhasesComplete
+      ? 'success'
+      : hasFailedPhase
+      ? 'failed'
+      : 'insufficient_data';
+    if (!allPhasesComplete) {
+      const incompletePhases = phases
+        .filter(({ result }) => result.status !== 'success' || result.medianMs === null)
+        .map(({ name, result }) => result.errorMessage ? `${name}: ${result.errorMessage}` : name);
+      limitations.push(`Incomplete latency samples for ${incompletePhases.join(', ')}.`);
+    }
 
     // Calculate loaded delta
     let loadedDeltaMs: number | null = null;

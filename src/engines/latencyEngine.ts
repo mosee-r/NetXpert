@@ -14,6 +14,7 @@ export interface LatencyProbeOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   onProgress?: (sampleIndex: number, currentMs: number) => void;
+  onProbeProgress?: (completedProbeCount: number, successfulProbeCount: number, failedProbeCount: number) => void;
 }
 
 export async function measureLatency(
@@ -25,11 +26,15 @@ export async function measureLatency(
     timeoutMs = 4000,
     signal,
     onProgress,
+    onProbeProgress,
   } = options;
 
   const samples: LatencySample[] = [];
+  let completedProbeCount = 0;
+  let failedProbeCount = 0;
   const limitations: string[] = [
     'Measured using HTTPS fetch round-trip time in browser runtime (includes TLS/HTTP protocol overhead; not bare ICMP socket ping).',
+    'HTTP probe failures are not IP-layer packet loss; packet loss was not measured.',
   ];
 
   let status: TestStatus = 'success';
@@ -50,46 +55,50 @@ export async function measureLatency(
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-      // Link external signal if provided
       const abortListener = () => controller.abort();
       if (signal) signal.addEventListener('abort', abortListener, { once: true });
 
-      const response = await fetch(probeUrl, {
-        method: 'GET',
-        headers: { Range: 'bytes=0-0' },
-        cache: 'no-store',
-        signal: controller.signal,
-      }).catch(async () => {
-        return await fetch(probeUrl, {
-          method: 'HEAD',
+      let response: Response;
+      try {
+        response = await fetch(probeUrl, {
+          method: 'GET',
+          headers: { Range: 'bytes=0-0' },
           cache: 'no-store',
           signal: controller.signal,
+        }).catch(async () => {
+          return await fetch(probeUrl, {
+            method: 'HEAD',
+            cache: 'no-store',
+            signal: controller.signal,
+          });
         });
-      });
-
-      clearTimeout(timeoutId);
-      if (signal) signal.removeEventListener('abort', abortListener);
+      } finally {
+        clearTimeout(timeoutId);
+        if (signal) signal.removeEventListener('abort', abortListener);
+      }
 
       const elapsed = Math.round(performance.now() - start);
 
       if (response && (response.ok || response.status === 206 || response.status === 304 || response.status === 204)) {
+        completedProbeCount++;
         samples.push({ timestamp: Date.now(), latencyMs: Math.max(1, elapsed) });
         if (onProgress) onProgress(i + 1, Math.max(1, elapsed));
+        onProbeProgress?.(completedProbeCount, samples.length, failedProbeCount);
       } else {
-        samples.push({ timestamp: Date.now(), latencyMs: Math.max(1, elapsed) });
-        if (onProgress) onProgress(i + 1, Math.max(1, elapsed));
+        completedProbeCount++;
+        failedProbeCount++;
+        errorMessage = `HTTP probe returned status ${response.status}.`;
+        onProbeProgress?.(completedProbeCount, samples.length, failedProbeCount);
       }
     } catch (err: unknown) {
       if (signal?.aborted) {
         status = 'cancelled';
         break;
       }
-      const errStr = String(err);
-      if (errStr.includes('aborted')) {
-        // timeout
-      } else {
-        errorMessage = errStr;
-      }
+      completedProbeCount++;
+      failedProbeCount++;
+      errorMessage = String(err);
+      onProbeProgress?.(completedProbeCount, samples.length, failedProbeCount);
     }
 
     // Small inter-probe pacing interval (50ms)
@@ -103,15 +112,17 @@ export async function measureLatency(
       target: targetUrl,
       method: 'HTTPS Fetch Round-Trip',
       sampleCount: 0,
+      completedProbeCount,
+      failedProbeCount,
       minMs: null,
       medianMs: null,
       avgMs: null,
       maxMs: null,
       jitterMs: null,
-      packetLossPercent: 100,
+      packetLossPercent: null,
       samples: [],
       limitations,
-      errorMessage: errorMessage || 'No latency probe samples responded.',
+      errorMessage: errorMessage || 'No successful latency probe samples were received.',
     };
   }
 
@@ -135,21 +146,21 @@ export async function measureLatency(
     jitterMs = Math.round(sumDeltas / (rawValues.length - 1));
   }
 
-  const packetLossPercent = Math.round(
-    ((sampleCount - samples.length) / sampleCount) * 100
-  );
-
   return {
-    status: samples.length >= Math.ceil(sampleCount / 2) ? 'success' : 'insufficient_data',
+    status: status === 'cancelled'
+      ? 'cancelled'
+      : samples.length >= Math.ceil(sampleCount / 2) ? 'success' : 'insufficient_data',
     target: targetUrl,
     method: 'HTTPS Fetch Round-Trip',
     sampleCount: samples.length,
+    completedProbeCount,
+    failedProbeCount,
     minMs,
     medianMs,
     avgMs,
     maxMs,
     jitterMs,
-    packetLossPercent,
+    packetLossPercent: null,
     samples,
     limitations,
   };

@@ -156,6 +156,7 @@ export async function measureMlabThroughput(
         bytesTransferred,
         durationMs,
         mbps,
+        tcpRttMs: latestTcpRttMs,
         samples,
         limitations,
         errorMessage,

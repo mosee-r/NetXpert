@@ -17,10 +17,6 @@ interface SettingsModalProps {
   onClose: () => void;
   pingTarget: string;
   setPingTarget: (val: string) => void;
-  downloadTarget: string;
-  setDownloadTarget: (val: string) => void;
-  uploadTarget: string;
-  setUploadTarget: (val: string) => void;
   dnsDomain: string;
   setDnsDomain: (val: string) => void;
   maxDownloadMb: number;
@@ -40,10 +36,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   pingTarget,
   setPingTarget,
-  downloadTarget,
-  setDownloadTarget,
-  uploadTarget,
-  setUploadTarget,
   dnsDomain,
   setDnsDomain,
   maxDownloadMb,
@@ -62,8 +54,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleReset = () => {
     const defaultEndpoints = getDefaultTestEndpoints();
     setPingTarget(defaultEndpoints.ping);
-    setDownloadTarget(defaultEndpoints.download);
-    setUploadTarget(defaultEndpoints.upload);
     setDnsDomain('cloudflare.com');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);
@@ -72,8 +62,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="bg-[#0E1A2E] border border-white/10 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 text-white shadow-2xl relative scrollbar-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-in fade-in duration-200">
+      <div className="bg-[#0E1A2E] border border-white/10 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 text-white relative scrollbar-none">
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex items-center space-x-2.5">
@@ -95,22 +85,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Form Controls */}
         <div className="space-y-4 py-4 text-xs">
-          {/* Multi-stream, M-Lab & Data Saver */}
+          {/* M-Lab diagnostics, data saver, and stream concurrency */}
           <div className="p-3.5 rounded-xl bg-[#15253D] border border-white/5 space-y-3">
             <div className="flex items-center justify-between">
               <div>
                 <span className="font-semibold text-slate-200 block flex items-center space-x-1.5">
-                  <span>Measurement Lab (M-Lab) NDT7</span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-cyan-950 text-cyan-300 border border-cyan-800">
-                    Recommended
+                  <span>M-Lab deep TCP diagnostics</span>
+                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
+                    Optional
                   </span>
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  Global open research servers (M-Lab Locate API + WebSocket ndt7)
+                  Runs separately after the Cloudflare speed test; includes M-Lab server metadata and may use extra data.
                 </span>
               </div>
               <button
                 onClick={() => setUseMlab(!useMlab)}
+                type="button"
+                role="switch"
+                aria-checked={useMlab}
+                aria-label="Run M-Lab deep TCP diagnostics"
                 className={`w-11 h-6 rounded-full transition-colors p-0.5 relative cursor-pointer ${
                   useMlab ? 'bg-cyan-500' : 'bg-slate-700'
                 }`}
@@ -160,16 +154,28 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
           </div>
 
-          {/* Test Target Endpoints */}
+          {/* Cloudflare primary throughput endpoints and optional ping target */}
           <div className="space-y-2">
             <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
               <Server className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Target Test Endpoints</span>
+              <span>Speed Test Provider</span>
             </span>
+            <p className="text-[11px] text-slate-400">
+              Cloudflare always measures the primary download and upload results. M-Lab runs separately for optional TCP diagnostics.
+            </p>
 
             <div className="space-y-2 font-mono text-[11px]">
+              <div className="rounded-lg border border-white/5 bg-slate-900/70 p-2.5 text-slate-300">
+                <span className="block text-slate-100">Cloudflare Speed Test edge (automatic)</span>
+                <span className="mt-1 block break-all text-slate-500">
+                  Download: {getDefaultTestEndpoints().download}
+                </span>
+                <span className="block break-all text-slate-500">
+                  Upload: {getDefaultTestEndpoints().upload}
+                </span>
+              </div>
               <div>
-                <label className="text-slate-300 block mb-0.5">Ping Probe URL:</label>
+                <label className="text-slate-300 block mb-0.5">Optional latency probe URL:</label>
                 <input
                   type="text"
                   value={pingTarget}
@@ -178,25 +184,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 />
               </div>
 
-              <div>
-                <label className="text-slate-300 block mb-0.5">Download Endpoint:</label>
-                <input
-                  type="text"
-                  value={downloadTarget}
-                  onChange={(e) => setDownloadTarget(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-400"
-                />
-              </div>
-
-              <div>
-                <label className="text-slate-300 block mb-0.5">Upload Discard Endpoint:</label>
-                <input
-                  type="text"
-                  value={uploadTarget}
-                  onChange={(e) => setUploadTarget(e.target.value)}
-                  className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 text-slate-200 focus:outline-none focus:border-cyan-400"
-                />
-              </div>
             </div>
           </div>
 
@@ -246,7 +233,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </button>
           <button
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-gradient-to-r from-cyan-500 to-indigo-600 hover:from-cyan-400 hover:to-indigo-500 text-white font-semibold text-xs transition-all shadow-md"
+            className="px-5 py-2 rounded-xl bg-app-accent hover:bg-app-accent-hover text-white font-semibold text-xs transition-colors"
           >
             Done
           </button>

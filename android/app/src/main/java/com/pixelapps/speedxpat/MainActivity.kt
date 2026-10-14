@@ -13,9 +13,12 @@ import android.net.wifi.WifiManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.Build
+import android.os.SystemClock
 import android.location.LocationManager
 import android.provider.Settings
 import android.util.Base64
+import androidx.core.content.FileProvider
+import java.io.File
 import org.json.JSONArray
 import org.json.JSONObject
 import android.webkit.GeolocationPermissions
@@ -170,8 +173,8 @@ class MainActivity : AppCompatActivity() {
                 if (wifiManager.startScan()) {
                     true
                 } else {
-                    publishWifiScanError("Android did not start a new scan. Wait a moment and try again; scan requests are rate-limited.")
-                    false
+                    publishWifiScanResults(false)
+                    true
                 }
             } catch (_: SecurityException) {
                 publishWifiScanError("Android blocked the Wi-Fi scan. Check Location permission and system Location settings.")
@@ -193,21 +196,39 @@ class MainActivity : AppCompatActivity() {
         private fun publishWifiScanResults(freshResults: Boolean) {
             @Suppress("DEPRECATION")
             val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val scanResults = try {
+                wifiManager?.scanResults.orEmpty()
+            } catch (_: SecurityException) {
+                publishWifiScanError("Android blocked access to Wi-Fi scan results. Check Location permission and system Location settings.")
+                return
+            }
+            val elapsedRealtimeMicros = SystemClock.elapsedRealtimeNanos() / 1_000
+            val latestScanAgeMs = scanResults
+                .filter { it.timestamp > 0 }
+                .minOfOrNull { ((elapsedRealtimeMicros - it.timestamp).coerceAtLeast(0)) / 1_000 }
+                ?: 0
+            val scanTimestamp = System.currentTimeMillis() - latestScanAgeMs
             val networks = try {
                 JSONArray().apply {
-                    wifiManager?.scanResults
-                        ?.filter { it.SSID.isNotBlank() && it.SSID != "<unknown ssid>" }
-                        ?.distinctBy { "${it.SSID}|${it.frequency}|${it.capabilities}" }
+                    scanResults
+                        .distinctBy { "${it.BSSID}|${it.frequency}|${it.capabilities}" }
                         ?.sortedByDescending { it.level }
                         ?.forEach { result ->
                             put(
                                 JSONObject()
-                                    .put("ssid", result.SSID)
+                                    .put(
+                                        "ssid",
+                                        result.SSID.takeUnless { it.isBlank() || it == "<unknown ssid>" } ?: ""
+                                    )
+                                    .put("bssid", result.BSSID.orEmpty())
+                                    .put("hidden", result.SSID.isBlank() || result.SSID == "<unknown ssid>")
                                     .put("frequencyMhz", result.frequency)
                                     .put("channel", wifiChannel(result.frequency) ?: JSONObject.NULL)
                                     .put("band", wifiBand(result.frequency))
+                                    .put("channelWidthMhz", wifiChannelWidth(result.channelWidth))
                                     .put("signalDbm", result.level)
                                     .put("security", wifiSecurity(result.capabilities))
+                                    .put("wifiStandard", wifiStandard(result))
                             )
                         }
                 }
@@ -219,9 +240,31 @@ class MainActivity : AppCompatActivity() {
             publishWifiScanPayload(
                 JSONObject()
                     .put("status", if (freshResults) "success" else "stale")
-                    .put("scannedAt", System.currentTimeMillis())
+                    .put("scannedAt", scanTimestamp)
+                    .put("scanAgeMs", latestScanAgeMs)
                     .put("networks", networks)
             )
+        }
+
+        private fun wifiChannelWidth(channelWidth: Int): Int = when (channelWidth) {
+            android.net.wifi.ScanResult.CHANNEL_WIDTH_40MHZ -> 40
+            android.net.wifi.ScanResult.CHANNEL_WIDTH_80MHZ -> 80
+            android.net.wifi.ScanResult.CHANNEL_WIDTH_160MHZ -> 160
+            android.net.wifi.ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ -> 160
+            else -> 20
+        }
+
+        private fun wifiStandard(result: android.net.wifi.ScanResult): String {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "Unknown"
+            return when (result.wifiStandard) {
+                android.net.wifi.ScanResult.WIFI_STANDARD_LEGACY -> "Legacy"
+                android.net.wifi.ScanResult.WIFI_STANDARD_11N -> "Wi-Fi 4"
+                android.net.wifi.ScanResult.WIFI_STANDARD_11AC -> "Wi-Fi 5"
+                android.net.wifi.ScanResult.WIFI_STANDARD_11AX -> "Wi-Fi 6"
+                android.net.wifi.ScanResult.WIFI_STANDARD_11AD -> "WiGig"
+                android.net.wifi.ScanResult.WIFI_STANDARD_11BE -> "Wi-Fi 7"
+                else -> "Unknown"
+            }
         }
 
         private fun publishWifiScanError(message: String) {
@@ -265,7 +308,7 @@ class MainActivity : AppCompatActivity() {
         }
 
     fun saveFile(filename: String, mimeType: String, content: String, base64Encoded: Boolean): Boolean {
-        if (mimeType !in setOf("application/pdf", "text/csv", "application/json")) return false
+        if (mimeType !in setOf("application/pdf", "image/png", "text/csv", "application/json")) return false
         if (pendingFileContent != null) return false
 
         val safeFilename = filename
@@ -298,6 +341,37 @@ class MainActivity : AppCompatActivity() {
             }
         }
         return true
+    }
+
+    fun shareFile(filename: String, mimeType: String, content: String, base64Encoded: Boolean): Boolean {
+        if (mimeType != "image/png" || !base64Encoded) return false
+
+        return try {
+            val safeFilename = filename
+                .substringAfterLast('/')
+                .substringAfterLast('\\')
+                .replace(Regex("[^A-Za-z0-9._-]"), "_")
+                .take(120)
+                .ifBlank { "SpeedXpat-results.png" }
+            val shareDirectory = File(cacheDir, "shared").apply { mkdirs() }
+            val shareFile = File(shareDirectory, safeFilename)
+            shareFile.writeBytes(Base64.decode(content, Base64.DEFAULT))
+            val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", shareFile)
+            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                type = mimeType
+                putExtra(Intent.EXTRA_STREAM, uri)
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            }
+            runOnUiThread {
+                startActivity(Intent.createChooser(shareIntent, "Share SpeedXpat test results"))
+            }
+            true
+        } catch (error: Exception) {
+            runOnUiThread {
+                Toast.makeText(this, "Unable to share PNG: ${error.localizedMessage}", Toast.LENGTH_LONG).show()
+            }
+            false
+        }
     }
 
     fun openLocationSettings() {
@@ -394,6 +468,11 @@ class SpeedXpatNativeInterface(private val context: Context) {
     @JavascriptInterface
     fun saveFile(filename: String, mimeType: String, content: String, base64Encoded: Boolean): Boolean {
         return (context as? MainActivity)?.saveFile(filename, mimeType, content, base64Encoded) ?: false
+    }
+
+    @JavascriptInterface
+    fun shareFile(filename: String, mimeType: String, content: String, base64Encoded: Boolean): Boolean {
+        return (context as? MainActivity)?.shareFile(filename, mimeType, content, base64Encoded) ?: false
     }
 
     companion object {

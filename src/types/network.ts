@@ -43,6 +43,8 @@ export interface LatencySummary {
   target: string;
   method: string; // e.g. "HTTPS Fetch TTFB" or "HTTP Round-Trip"
   sampleCount: number;
+  completedProbeCount: number;
+  failedProbeCount: number;
   minMs: number | null;
   medianMs: number | null;
   avgMs: number | null;
@@ -60,6 +62,11 @@ export interface ThroughputSample {
   instantMbps: number;
 }
 
+export interface ThroughputChartPoint {
+  elapsedMs: number;
+  mbps: number;
+}
+
 export interface ThroughputSummary {
   status: TestStatus;
   target: string;
@@ -68,6 +75,7 @@ export interface ThroughputSummary {
   bytesTransferred: number;
   durationMs: number;
   mbps: number | null;
+  tcpRttMs?: number;
   samples: ThroughputSample[];
   limitations: string[];
   errorMessage?: string;

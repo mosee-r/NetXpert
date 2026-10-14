@@ -65,7 +65,11 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
   // Find recent Wi-Fi and Cellular runs from history for side-by-side comparison
   const recentWifiRun = history.find((h) => h.networkInfo.networkType === 'wifi');
   const recentCellularRun = history.find((h) => h.networkInfo.networkType === 'cellular');
-  const unavailable = networkInfo ? 'Not available' : 'Checking...';
+  const unavailable = 'Not available';
+  const formatMetric = (value: number | null | undefined, unit: string) =>
+    value === null || value === undefined || !Number.isFinite(value)
+      ? 'Not available'
+      : `${value} ${unit}`;
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-20">
@@ -103,19 +107,22 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         )}
       </div>
 
-      {/* 1. Dedicated ISP & Autonomous System (ASN) Lookup Card (ipinfo.io) */}
+      {/* 1. ISP identity from a separate public IP-to-ASN lookup */}
       <div className="p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/30 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center space-x-2 text-cyan-400">
             <Globe className="w-4 h-4" />
             <h3 className="text-sm font-bold text-white uppercase tracking-wider">
-              ISP & Autonomous System (ASN) Lookup
+              IP-to-ASN ISP Identification
             </h3>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
             Source: ipinfo.io API
           </span>
         </div>
+        <p className="text-xs text-slate-400">
+          Identifies the network announcing your public IP. This is separate from the server used for a speed test.
+        </p>
 
         {/* 4-Box Telemetry Matrix for ISP & ASN */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
@@ -229,29 +236,29 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             </span>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
-            {networkInfo?.online ? 'Connected & Online' : 'Offline'}
+            {networkInfo ? (networkInfo.online ? 'Connected & Online' : 'Offline') : 'Checking...'}
           </span>
         </div>
 
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs font-mono">
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
-            <span className="text-[10px] text-slate-400 block uppercase">Link Speed (Downlink)</span>
+            <span className="text-[10px] text-slate-400 block uppercase">Reported Downlink</span>
             <span className="text-base font-bold text-cyan-300">
-              {networkInfo?.downlinkMbps ? `${networkInfo.downlinkMbps} Mbps` : '866 Mbps (Estimated)'}
+              {formatMetric(networkInfo?.downlinkMbps, 'Mbps')}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
-            <span className="text-[10px] text-slate-400 block uppercase">Band & Frequency</span>
+            <span className="text-[10px] text-slate-400 block uppercase">Wi-Fi Frequency</span>
             <span className="text-base font-bold text-indigo-300">
-              5 GHz (Wi-Fi 6)
+              {formatMetric(networkInfo?.wifiFrequencyMhz, 'MHz')}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
-            <span className="text-[10px] text-slate-400 block uppercase">Estimated Signal (RSSI)</span>
+            <span className="text-[10px] text-slate-400 block uppercase">Wi-Fi Signal (RSSI)</span>
             <span className="text-base font-bold text-emerald-400">
-              -54 dBm (Excellent)
+              {formatMetric(networkInfo?.wifiSignalDbm, 'dBm')}
             </span>
           </div>
         </div>
@@ -259,10 +266,10 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         {/* IP Addresses & Gateway Rows with copy */}
         <div className="space-y-2 pt-2 border-t border-white/5 text-xs">
           {[
-            { key: 'internal_ip', label: 'Local Device IP', val: '192.168.1.142' },
-            { key: 'gateway_ip', label: 'Default Router Gateway', val: '192.168.1.1' },
-            { key: 'public_ip', label: 'Public IP', val: networkInfo?.ipAddress || 'Auto-Detected' },
-            { key: 'dns_resolvers', label: 'DNS Resolvers', val: '1.1.1.1, 8.8.8.8' },
+            { key: 'internal_ip', label: 'Local Device IP', val: 'Not available' },
+            { key: 'gateway_ip', label: 'Default Router Gateway', val: 'Not available' },
+            { key: 'public_ip', label: 'Public IP', val: networkInfo?.ipAddress || unavailable },
+            { key: 'dns_resolvers', label: 'DNS Resolvers', val: 'Not available' },
           ].map((row) => (
             <div
               key={row.key}
@@ -273,7 +280,8 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
                 <span className="font-mono text-slate-200 font-semibold">{row.val}</span>
               </div>
               <button
-                onClick={() => copyToClipboard(row.key, row.val)}
+                onClick={() => row.val !== 'Not available' && row.val !== 'Checking...' && copyToClipboard(row.key, row.val)}
+                disabled={row.val === 'Not available' || row.val === 'Checking...'}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
                 title="Copy to clipboard"
               >
@@ -310,19 +318,19 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             <div>
               <span className="text-[10px] text-slate-400 block">DOWNLOAD</span>
               <span className="text-lg font-bold text-white">
-                {recentWifiRun?.rawMeasurements.downloadThroughput.mbps ? `${recentWifiRun.rawMeasurements.downloadThroughput.mbps} Mbps` : '182.4 Mbps'}
+                {formatMetric(recentWifiRun?.rawMeasurements.downloadThroughput.mbps, 'Mbps')}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">IDLE PING</span>
               <span className="text-sm font-semibold text-emerald-400">
-                {recentWifiRun?.rawMeasurements.idleLatency.medianMs ? `${recentWifiRun.rawMeasurements.idleLatency.medianMs} ms` : '14 ms'}
+                {formatMetric(recentWifiRun?.rawMeasurements.idleLatency.medianMs, 'ms')}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">BUFFERBLOAT</span>
               <span className="text-xs text-amber-300">
-                +{recentWifiRun?.rawMeasurements.loadedLatency.loadedDeltaMs ?? 18} ms
+                {formatMetric(recentWifiRun?.rawMeasurements.loadedLatency.loadedDeltaMs, 'ms')}
               </span>
             </div>
           </div>
@@ -331,24 +339,24 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
           <div className="p-3.5 rounded-xl bg-slate-900/80 border border-indigo-500/30 space-y-2">
             <div className="flex items-center space-x-1.5 text-indigo-300 font-bold border-b border-white/5 pb-1">
               <Radio className="w-3.5 h-3.5" />
-              <span>Mobile 5G / LTE</span>
+              <span>Cellular Connection</span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">DOWNLOAD</span>
               <span className="text-lg font-bold text-white">
-                {recentCellularRun?.rawMeasurements.downloadThroughput.mbps ? `${recentCellularRun.rawMeasurements.downloadThroughput.mbps} Mbps` : '94.2 Mbps'}
+                {formatMetric(recentCellularRun?.rawMeasurements.downloadThroughput.mbps, 'Mbps')}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">IDLE PING</span>
               <span className="text-sm font-semibold text-purple-400">
-                {recentCellularRun?.rawMeasurements.idleLatency.medianMs ? `${recentCellularRun.rawMeasurements.idleLatency.medianMs} ms` : '38 ms'}
+                {formatMetric(recentCellularRun?.rawMeasurements.idleLatency.medianMs, 'ms')}
               </span>
             </div>
             <div>
               <span className="text-[10px] text-slate-400 block">BUFFERBLOAT</span>
               <span className="text-xs text-amber-300">
-                +{recentCellularRun?.rawMeasurements.loadedLatency.loadedDeltaMs ?? 62} ms
+                {formatMetric(recentCellularRun?.rawMeasurements.loadedLatency.loadedDeltaMs, 'ms')}
               </span>
             </div>
           </div>
