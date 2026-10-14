@@ -100,8 +100,18 @@ export default function App() {
   const [dataSaverMode, setDataSaverMode] = useState(false);
   const [useMlab, setUseMlab] = useState(true);
 
-  // Active Test Execution State
   const [isTesting, setIsTesting] = useState(false);
+  const [isSplashActive, setIsSplashActive] = useState(true);
+  const [splashFading, setSplashFading] = useState(false);
+
+  useEffect(() => {
+    const fadeTimer = setTimeout(() => setSplashFading(true), 700);
+    const removeTimer = setTimeout(() => setIsSplashActive(false), 1000);
+    return () => {
+      clearTimeout(fadeTimer);
+      clearTimeout(removeTimer);
+    };
+  }, []);
   const [testStage, setTestStage] = useState<AssessmentStage>('idle');
   const [stageName, setStageName] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
@@ -377,6 +387,30 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-app-canvas text-app-primary flex flex-col font-sans selection:bg-app-accent selection:text-white">
+      {/* 0. Initial Animated Splash Screen Overlay */}
+      {isSplashActive && (
+        <div
+          className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-app-canvas transition-opacity duration-300 ${
+            splashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
+          }`}
+        >
+          <div className="relative flex h-40 w-40 items-center justify-center">
+            <div className="absolute h-36 w-36 rounded-full border border-cyan-400/30 splash-sweep" aria-hidden="true" />
+            <div className="splash-mark relative flex h-28 w-28 items-center justify-center rounded-2xl border border-cyan-400/35 bg-app-surface shadow-xl shadow-cyan-950/40">
+              <img src="/speedxpat-logo.png" alt="SpeedXpat Logo" className="h-16 w-16 object-contain" />
+            </div>
+          </div>
+          <div className="splash-title mt-7 text-center">
+            <h1 className="font-mono text-2xl font-extrabold tracking-tight text-app-primary">
+              Speed<span className="text-cyan-400">Xpat</span>
+            </h1>
+            <p className="mt-1.5 font-mono text-xs uppercase tracking-wider text-app-muted">
+              Network Diagnostics & Assessment
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* 1. Top App Bar */}
       <Header
         networkInfo={networkInfo}
@@ -388,8 +422,6 @@ export default function App() {
           (pendingReport !== null || currentReport !== null)
         }
         hasPendingResult={pendingReport !== null}
-        advancedMode={advancedMode}
-        onToggleAdvancedMode={handleToggleAdvancedMode}
         onCancelTest={handleCancelTest}
         onDiscardPendingResult={handleDiscardResults}
         onRetest={handleStartTest}
@@ -440,6 +472,7 @@ export default function App() {
             sparklineData={sparklineData}
             activeMetrics={activeMetrics}
             advancedMode={advancedMode}
+            onToggleAdvancedMode={handleToggleAdvancedMode}
             onStartTest={handleStartTest}
             onCancelTest={handleCancelTest}
             onSaveAndClose={handleSaveAndClose}

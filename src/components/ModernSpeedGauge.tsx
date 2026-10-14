@@ -7,14 +7,23 @@ interface ModernSpeedGaugeProps {
   maxExpected?: number;
   phase: SpeedTestPhase;
   isRunning: boolean;
+  statusLabel?: string;
 }
 
 const PHASE_LABELS: Record<SpeedTestPhase, string> = {
   idle: 'Ready',
-  latency: 'Testing latency',
-  download: 'Testing download',
-  upload: 'Testing upload',
-  completed: 'Test complete',
+  latency: 'Testing Latency...',
+  download: 'Testing Download...',
+  upload: 'Testing Upload...',
+  completed: 'Test Complete',
+};
+
+const PHASE_COLORS: Record<SpeedTestPhase, { primary: string; text: string; glow: string }> = {
+  idle: { primary: '#06b6d4', text: '#38bdf8', glow: 'rgba(6, 182, 212, 0.4)' },
+  latency: { primary: '#38bdf8', text: '#7dd3fc', glow: 'rgba(56, 189, 248, 0.38)' },
+  download: { primary: '#06b6d4', text: '#38bdf8', glow: 'rgba(6, 182, 212, 0.45)' },
+  upload: { primary: '#3b82f6', text: '#60a5fa', glow: 'rgba(59, 130, 246, 0.4)' },
+  completed: { primary: '#10b981', text: '#34d399', glow: 'rgba(16, 185, 129, 0.4)' },
 };
 
 const SCALE_TICKS = [0, 1, 5, 10, 20, 30, 40, 50, 60, 80, 100];
@@ -75,6 +84,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   maxExpected = 100,
   phase,
   isRunning,
+  statusLabel,
 }) => {
   const instanceId = useId().replace(/:/g, '');
   const gradientId = `speed-arc-${instanceId}`;
@@ -84,8 +94,10 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const activeArcRef = useRef<SVGPathElement>(null);
   const needleRef = useRef<SVGLineElement>(null);
+  const needleTipRef = useRef<SVGCircleElement>(null);
   const physicsRef = useRef({ angle: START_ANGLE, velocity: 0 });
   const safeValue = value !== null && Number.isFinite(value) ? Math.max(0, value) : null;
+  const theme = PHASE_COLORS[phase];
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -114,6 +126,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   const end = polarToCartesian(RADIUS, START_ANGLE + SWEEP_ANGLE);
   const arcPath = `M ${start.x} ${start.y} A ${RADIUS} ${RADIUS} 0 1 1 ${end.x} ${end.y}`;
   const speedLabel = formatSpeed(safeValue);
+  const phaseLabel = statusLabel || PHASE_LABELS[phase];
   const targetTip = polarToCartesian(RADIUS - 22, targetAngle);
 
   useEffect(() => {
@@ -127,6 +140,8 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
       const tip = polarToCartesian(RADIUS - 22, angle);
       needleRef.current?.setAttribute('x2', tip.x.toFixed(2));
       needleRef.current?.setAttribute('y2', tip.y.toFixed(2));
+      needleTipRef.current?.setAttribute('cx', tip.x.toFixed(2));
+      needleTipRef.current?.setAttribute('cy', tip.y.toFixed(2));
       activeArcRef.current?.style.setProperty('stroke-dashoffset', String(100 * (1 - currentProgress)));
     };
 
@@ -161,38 +176,60 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [targetAngle, prefersReducedMotion]);
 
   return (
-    <div className="mx-auto my-1 w-full max-w-[300px] select-none [transform:translateZ(0)] lg:max-w-[360px]">
-      <div className="relative">
+    <div className="mx-auto my-2 w-full max-w-[320px] select-none lg:max-w-[380px]">
+      <div className="relative flex items-center justify-center">
+        {/* Ambient Pulsing Backlight Halo */}
+        <div
+          className={`absolute inset-4 rounded-full blur-2xl transition-all duration-500 pointer-events-none ${
+            isRunning ? 'opacity-70 scale-105' : 'opacity-25 scale-100'
+          }`}
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+        />
+
         <svg
           viewBox="0 0 300 240"
-          className="block h-auto w-full overflow-visible"
+          className="relative block h-auto w-full overflow-visible"
           role="img"
-          aria-label={`${PHASE_LABELS[phase]}: ${speedLabel} Mbps, dial scale 0 to ${formatTick(safeMax)} Mbps`}
+          aria-label={`${phaseLabel}: ${speedLabel} Mbps`}
         >
           <defs>
-            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="var(--app-accent)" />
-              <stop offset="60%" stopColor="var(--app-accent-text)" />
-              <stop offset="100%" stopColor="var(--app-accent)" />
+            <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
+              <stop offset="0%" stopColor="#00f5ee" />
+              <stop offset="48%" stopColor="#05c8f5" />
+              <stop offset="100%" stopColor="#1648ff" />
             </linearGradient>
-            <filter id={glowId} x="-20%" y="-20%" width="140%" height="140%">
-              <feDropShadow dx="0" dy="0" stdDeviation="4" floodColor="var(--app-accent)" floodOpacity="0.32" />
+            <filter id={glowId} x="-30%" y="-30%" width="160%" height="160%">
+              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feMerge>
+                <feMergeNode in="blur" />
+                <feMergeNode in="SourceGraphic" />
+              </feMerge>
             </filter>
           </defs>
 
+          {/* Background Arc Track */}
           <path
             d={arcPath}
             fill="none"
-            stroke="var(--app-raised)"
-            strokeWidth="14"
+            stroke="rgba(30, 41, 59, 0.85)"
+            strokeWidth="16"
             strokeLinecap="round"
           />
+          <path
+            d={arcPath}
+            fill="none"
+            stroke="rgba(255, 255, 255, 0.04)"
+            strokeWidth="16"
+            strokeLinecap="round"
+          />
+
+          {/* Glowing Active Speed Arc */}
           <path
             ref={activeArcRef}
             d={arcPath}
             fill="none"
             stroke={`url(#${gradientId})`}
-            strokeWidth="14"
+            strokeWidth="16"
             strokeLinecap="round"
             pathLength="100"
             strokeDasharray="100 100"
@@ -200,11 +237,12 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
             filter={`url(#${glowId})`}
           />
 
+          {/* Tick Marks & Labels */}
           {ticks.map((tick, index) => {
             const angle = START_ANGLE + (index / (ticks.length - 1)) * SWEEP_ANGLE;
-            const outer = polarToCartesian(RADIUS - 6, angle);
-            const inner = polarToCartesian(RADIUS - 12, angle);
-            const label = polarToCartesian(82, angle);
+            const outer = polarToCartesian(RADIUS - 8, angle);
+            const inner = polarToCartesian(RADIUS - 16, angle);
+            const label = polarToCartesian(78, angle);
             const isMajor = index === 0 || index === ticks.length - 1 || index % 2 === 0;
             return (
               <g key={`tick-${index}`} aria-hidden="true">
@@ -213,16 +251,16 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
                   y1={inner.y}
                   x2={outer.x}
                   y2={outer.y}
-                  stroke={isMajor ? 'var(--app-muted)' : 'var(--app-divider-strong)'}
-                  strokeWidth={isMajor ? 1.5 : 1}
+                  stroke={isMajor ? '#94a3b8' : 'rgba(148, 163, 184, 0.35)'}
+                  strokeWidth={isMajor ? 2 : 1}
                   strokeLinecap="round"
                 />
                 <text
                   x={label.x}
                   y={label.y + 3}
-                  fill="var(--app-muted)"
-                  fontSize="9"
-                  fontWeight="500"
+                  fill="#94a3b8"
+                  fontSize="8.5"
+                  fontWeight="600"
                   fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
                   textAnchor="middle"
                 >
@@ -232,46 +270,72 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
             );
           })}
 
+          {/* Animated Needle */}
           {isRunning && (
-            <line
-              ref={needleRef}
-              x1={CENTER}
-              y1={CENTER}
-              x2={targetTip.x}
-              y2={targetTip.y}
-              stroke="var(--app-accent-text)"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              filter={`url(#${glowId})`}
-            />
+            <>
+              <line
+                ref={needleRef}
+                x1={CENTER}
+                y1={CENTER}
+                x2={targetTip.x}
+                y2={targetTip.y}
+                stroke={theme.text}
+                strokeWidth="3"
+                strokeLinecap="round"
+                filter={`url(#${glowId})`}
+              />
+              <circle
+                ref={needleTipRef}
+                cx={targetTip.x}
+                cy={targetTip.y}
+                r="4.5"
+                fill="#ffffff"
+                filter={`url(#${glowId})`}
+              />
+              <circle cx={CENTER} cy={CENTER} r="8" fill="rgba(15, 23, 42, 0.9)" stroke={theme.text} strokeWidth="2" />
+              <circle cx={CENTER} cy={CENTER} r="3.5" fill={theme.text} />
+            </>
           )}
-          {isRunning && <circle cx={CENTER} cy={CENTER} r="5.5" fill="var(--app-accent-text)" />}
-          {isRunning && <circle cx={CENTER} cy={CENTER} r="2.5" fill="var(--app-canvas)" />}
 
+          {/* Live Digital Display Readout */}
           <text
             x={CENTER}
-            y="211"
+            y="208"
             textAnchor="middle"
-            fill="var(--app-primary)"
+            fill="#f8fafc"
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-            fontSize="30"
-            fontWeight="700"
-            style={{ fontVariantNumeric: 'tabular-nums' }}
+            fontSize="34"
+            fontWeight="800"
+            style={{
+              fontVariantNumeric: 'tabular-nums',
+              filter: `drop-shadow(0 0 10px ${theme.glow})`,
+            }}
           >
             {speedLabel}
           </text>
           <text
             x={CENTER}
-            y="229"
+            y="228"
             textAnchor="middle"
-            fill="var(--app-muted)"
+            fill="#94a3b8"
             fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
             fontSize="10"
-            letterSpacing="1"
+            fontWeight="600"
+            letterSpacing="1.2"
           >
-            Mbps · {formatTick(safeMax)} MAX
+            Mbps
           </text>
         </svg>
+
+        {/* Floating Active Phase Badge */}
+        {isRunning && (
+          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-cyan-500/30 bg-slate-900/80 px-3 py-1 backdrop-blur-md shadow-lg shadow-cyan-950/50">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+            <span className="text-[11px] font-semibold text-cyan-300 uppercase tracking-wider">
+              {phaseLabel}
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -17,6 +17,7 @@ import android.os.SystemClock
 import android.location.LocationManager
 import android.provider.Settings
 import android.util.Base64
+import android.util.Log
 import androidx.core.content.FileProvider
 import java.io.File
 import org.json.JSONArray
@@ -33,9 +34,10 @@ import android.webkit.WebViewClient
 import androidx.webkit.WebViewAssetLoader
 import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import android.widget.Toast
+
+private const val WEBVIEW_LOG_TAG = "SpeedXpatWebView"
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
@@ -43,6 +45,28 @@ class MainActivity : AppCompatActivity() {
     private var pendingFileMimeType = ""
     private var pendingFileBase64Encoded = false
     private var wifiScanReceiverRegistered = false
+    private var wifiPermissionRequestPending = false
+
+    private val requestWifiLocationPermissions = registerForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        wifiPermissionRequestPending = false
+        val locationGranted =
+            results[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                results[Manifest.permission.ACCESS_COARSE_LOCATION] == true ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val nearbyGranted =
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU ||
+                results[Manifest.permission.NEARBY_WIFI_DEVICES] == true ||
+                ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) == PackageManager.PERMISSION_GRANTED
+
+        if (locationGranted || nearbyGranted) {
+            startWifiScan()
+        } else {
+            publishWifiScanError("Location and Wi-Fi permissions are required to scan nearby Wi-Fi networks.")
+        }
+    }
 
     private val wifiScanReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context?, intent: Intent?) {
@@ -55,7 +79,6 @@ class MainActivity : AppCompatActivity() {
         ActivityResultContracts.StartActivityForResult()
     ) { result ->
         val content = pendingFileContent
-        val mimeType = pendingFileMimeType
         val base64Encoded = pendingFileBase64Encoded
         pendingFileContent = null
         pendingFileMimeType = ""
@@ -79,18 +102,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    companion object {
-        private const val PERMISSION_REQUEST_CODE = 1001
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        checkAndRequestPermissions()
-
         webView = findViewById(R.id.webView)
-        if (0 != applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) {
+        if (applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE != 0) {
             WebView.setWebContentsDebuggingEnabled(true)
         }
 
@@ -113,6 +130,17 @@ class MainActivity : AppCompatActivity() {
         registerWifiScanReceiver()
 
         webView.webChromeClient = object : WebChromeClient() {
+            override fun onConsoleMessage(consoleMessage: android.webkit.ConsoleMessage): Boolean {
+                val logMessage =
+                    "${consoleMessage.message()} (${consoleMessage.sourceId()}:${consoleMessage.lineNumber()})"
+                when (consoleMessage.messageLevel()) {
+                    android.webkit.ConsoleMessage.MessageLevel.ERROR -> Log.e(WEBVIEW_LOG_TAG, logMessage)
+                    android.webkit.ConsoleMessage.MessageLevel.WARNING -> Log.w(WEBVIEW_LOG_TAG, logMessage)
+                    else -> Log.d(WEBVIEW_LOG_TAG, logMessage)
+                }
+                return true
+            }
+
             override fun onPermissionRequest(request: PermissionRequest) {
                 request.deny()
             }
@@ -142,117 +170,149 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-            if (wifiScanReceiverRegistered) {
-                unregisterReceiver(wifiScanReceiver)
-                wifiScanReceiverRegistered = false
+        if (wifiScanReceiverRegistered) {
+            unregisterReceiver(wifiScanReceiver)
+            wifiScanReceiverRegistered = false
+        }
+        super.onDestroy()
+    }
+
+    fun startWifiScan(): Boolean {
+        val permissionsToRequest = mutableListOf<String>()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+                permissionsToRequest.add(Manifest.permission.NEARBY_WIFI_DEVICES)
             }
-            super.onDestroy()
         }
 
-        fun startWifiScan(): Boolean {
-            val locationPermissionGranted =
-                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
-                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
-            if (!locationPermissionGranted) {
-                publishWifiScanError("Allow Location permission to scan nearby Wi-Fi networks.")
-                return false
-            }
-            if (!SpeedXpatNativeInterface.isLocationEnabled(this)) {
-                publishWifiScanError("Turn on device Location services to scan nearby Wi-Fi networks.")
-                return false
-            }
+        val hasFineLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        val hasCoarseLocation = ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+        if (!hasFineLocation && !hasCoarseLocation) {
+            permissionsToRequest.add(Manifest.permission.ACCESS_FINE_LOCATION)
+            permissionsToRequest.add(Manifest.permission.ACCESS_COARSE_LOCATION)
+        }
 
-            @Suppress("DEPRECATION")
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            if (wifiManager == null || !wifiManager.isWifiEnabled) {
-                publishWifiScanError("Turn on Wi-Fi before scanning for nearby networks.")
-                return false
-            }
-
-            return try {
-                if (wifiManager.startScan()) {
-                    true
-                } else {
-                    publishWifiScanResults(false)
-                    true
+        if (permissionsToRequest.isNotEmpty()) {
+            if (!wifiPermissionRequestPending) {
+                wifiPermissionRequestPending = true
+                runOnUiThread {
+                    try {
+                        requestWifiLocationPermissions.launch(permissionsToRequest.toTypedArray())
+                    } catch (error: Exception) {
+                        wifiPermissionRequestPending = false
+                        publishWifiScanError(
+                            "Unable to request Wi-Fi & Location permissions: ${error.localizedMessage}"
+                        )
+                    }
                 }
-            } catch (_: SecurityException) {
-                publishWifiScanError("Android blocked the Wi-Fi scan. Check Location permission and system Location settings.")
-                false
             }
+            return true
         }
 
-        private fun registerWifiScanReceiver() {
-            val filter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(wifiScanReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        if (!SpeedXpatNativeInterface.isLocationEnabled(this)) {
+            publishWifiScanError("Turn on device Location services to scan nearby Wi-Fi networks.")
+            return false
+        }
+
+        @Suppress("DEPRECATION")
+        val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
+        if (wifiManager == null || !wifiManager.isWifiEnabled) {
+            publishWifiScanError("Turn on Wi-Fi before scanning for nearby networks.")
+            return false
+        }
+
+        return try {
+            if (wifiManager.startScan()) {
+                true
             } else {
-                @Suppress("DEPRECATION")
-                registerReceiver(wifiScanReceiver, filter)
+                publishWifiScanResults(false)
+                true
             }
-            wifiScanReceiverRegistered = true
+        } catch (_: SecurityException) {
+            publishWifiScanError("Android blocked the Wi-Fi scan. Check Location permission and system Location settings.")
+            false
         }
+    }
 
-        private fun publishWifiScanResults(freshResults: Boolean) {
+    private fun registerWifiScanReceiver() {
+        val filter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            registerReceiver(wifiScanReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
+        } else {
             @Suppress("DEPRECATION")
-            val wifiManager = applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
-            val scanResults = try {
-                wifiManager?.scanResults.orEmpty()
-            } catch (_: SecurityException) {
-                publishWifiScanError("Android blocked access to Wi-Fi scan results. Check Location permission and system Location settings.")
-                return
-            }
-            val elapsedRealtimeMicros = SystemClock.elapsedRealtimeNanos() / 1_000
-            val latestScanAgeMs = scanResults
-                .filter { it.timestamp > 0 }
-                .minOfOrNull { ((elapsedRealtimeMicros - it.timestamp).coerceAtLeast(0)) / 1_000 }
-                ?: 0
-            val scanTimestamp = System.currentTimeMillis() - latestScanAgeMs
-            val networks = try {
-                JSONArray().apply {
-                    scanResults
-                        .distinctBy { "${it.BSSID}|${it.frequency}|${it.capabilities}" }
-                        ?.sortedByDescending { it.level }
-                        ?.forEach { result ->
-                            put(
-                                JSONObject()
-                                    .put(
-                                        "ssid",
-                                        result.SSID.takeUnless { it.isBlank() || it == "<unknown ssid>" } ?: ""
-                                    )
-                                    .put("bssid", result.BSSID.orEmpty())
-                                    .put("hidden", result.SSID.isBlank() || result.SSID == "<unknown ssid>")
-                                    .put("frequencyMhz", result.frequency)
-                                    .put("channel", wifiChannel(result.frequency) ?: JSONObject.NULL)
-                                    .put("band", wifiBand(result.frequency))
-                                    .put("channelWidthMhz", wifiChannelWidth(result.channelWidth))
-                                    .put("signalDbm", result.level)
-                                    .put("security", wifiSecurity(result.capabilities))
-                                    .put("wifiStandard", wifiStandard(result))
-                            )
-                        }
-                }
-            } catch (_: SecurityException) {
-                publishWifiScanError("Android blocked access to Wi-Fi scan results. Check Location permission and system Location settings.")
-                return
-            }
+            registerReceiver(wifiScanReceiver, filter)
+        }
+        wifiScanReceiverRegistered = true
+    }
 
-            publishWifiScanPayload(
-                JSONObject()
-                    .put("status", if (freshResults) "success" else "stale")
-                    .put("scannedAt", scanTimestamp)
-                    .put("scanAgeMs", latestScanAgeMs)
-                    .put("networks", networks)
-            )
+    private fun publishWifiScanResults(freshResults: Boolean) {
+        @Suppress("DEPRECATION")
+        val wifiManager = applicationContext.getSystemService(WIFI_SERVICE) as? WifiManager
+        val scanResults = try {
+            wifiManager?.scanResults.orEmpty()
+        } catch (_: SecurityException) {
+            publishWifiScanError("Android blocked access to Wi-Fi scan results. Check Location permission and system Location settings.")
+            return
+        }
+        val elapsedRealtimeMicros = SystemClock.elapsedRealtimeNanos() / 1_000
+        val latestScanAgeMs = scanResults
+            .filter { it.timestamp > 0 }
+            .minOfOrNull { ((elapsedRealtimeMicros - it.timestamp).coerceAtLeast(0)) / 1_000 }
+            ?: 0
+        val scanTimestamp = System.currentTimeMillis() - latestScanAgeMs
+        val networks = try {
+            JSONArray().apply {
+                scanResults
+                    .distinctBy { "${it.SSID}|${it.BSSID}|${it.frequency}|${it.capabilities}" }
+                    .sortedByDescending { it.level }
+                    .forEach { result ->
+                        put(
+                            JSONObject()
+                                .put(
+                                    "ssid",
+                                    result.SSID.takeUnless { it.isBlank() || it == "<unknown ssid>" } ?: ""
+                                )
+                                .put("bssid", result.BSSID.orEmpty())
+                                .put("hidden", result.SSID.isBlank() || result.SSID == "<unknown ssid>")
+                                .put("frequencyMhz", result.frequency)
+                                .put("channel", wifiChannel(result.frequency) ?: JSONObject.NULL)
+                                .put("band", wifiBand(result.frequency))
+                                .put("channelWidthMhz", wifiChannelWidth(result.channelWidth))
+                                .put("signalDbm", result.level)
+                                .put("security", wifiSecurity(result.capabilities))
+                                .put("wifiStandard", wifiStandard(result))
+                        )
+                    }
+            }
+        } catch (_: SecurityException) {
+            publishWifiScanError("Android blocked access to Wi-Fi scan results. Check Location permission and system Location settings.")
+            return
         }
 
-        private fun wifiChannelWidth(channelWidth: Int): Int = when (channelWidth) {
+        publishWifiScanPayload(
+            JSONObject()
+                .put("status", if (freshResults) "success" else "stale")
+                .put("scannedAt", scanTimestamp)
+                .put("scanAgeMs", latestScanAgeMs)
+                .put("networks", networks)
+        )
+    }
+
+    private fun wifiChannelWidth(channelWidth: Int): Int {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE &&
+            channelWidth == android.net.wifi.ScanResult.CHANNEL_WIDTH_320MHZ
+        ) {
+            return 320
+        }
+        return when (channelWidth) {
             android.net.wifi.ScanResult.CHANNEL_WIDTH_40MHZ -> 40
             android.net.wifi.ScanResult.CHANNEL_WIDTH_80MHZ -> 80
             android.net.wifi.ScanResult.CHANNEL_WIDTH_160MHZ -> 160
             android.net.wifi.ScanResult.CHANNEL_WIDTH_80MHZ_PLUS_MHZ -> 160
             else -> 20
         }
+    }
 
         private fun wifiStandard(result: android.net.wifi.ScanResult): String {
             if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return "Unknown"
@@ -391,30 +451,6 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun checkAndRequestPermissions() {
-        val permissions = mutableListOf(
-            Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.ACCESS_WIFI_STATE,
-            Manifest.permission.ACCESS_NETWORK_STATE
-        )
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-        }
-
-        val missingPermissions = permissions.filter {
-            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
-        }
-
-        if (missingPermissions.isNotEmpty()) {
-            ActivityCompat.requestPermissions(
-                this,
-                missingPermissions.toTypedArray(),
-                PERMISSION_REQUEST_CODE
-            )
-        }
-    }
-
     override fun onBackPressed() {
         if (webView.canGoBack()) {
             webView.goBack()
@@ -546,6 +582,31 @@ private class SpeedXpatWebViewClient(
             ?: super.shouldInterceptRequest(view, request)
     }
 
+    override fun onReceivedError(
+        view: WebView,
+        request: WebResourceRequest,
+        error: android.webkit.WebResourceError,
+    ) {
+        Log.e(
+            WEBVIEW_LOG_TAG,
+            "WebView load failed (mainFrame=${request.isForMainFrame}, code=${error.errorCode}): " +
+                "${request.url} — ${error.description}"
+        )
+        super.onReceivedError(view, request, error)
+    }
+
+    override fun onReceivedHttpError(
+        view: WebView,
+        request: WebResourceRequest,
+        errorResponse: WebResourceResponse,
+    ) {
+        Log.e(
+            WEBVIEW_LOG_TAG,
+            "WebView HTTP error ${errorResponse.statusCode} (mainFrame=${request.isForMainFrame}): ${request.url}"
+        )
+        super.onReceivedHttpError(view, request, errorResponse)
+    }
+
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val uri = request.url
         return uri.scheme != "https" || uri.host != "appassets.androidplatform.net"
@@ -570,7 +631,8 @@ private class SpeedXpatWebViewClient(
                 else -> "application/octet-stream"
             }
             WebResourceResponse(mimeType, "UTF-8", inputStream)
-        } catch (_: Exception) {
+        } catch (error: Exception) {
+            Log.e(WEBVIEW_LOG_TAG, "Unable to open WebView asset: $path", error)
             null
         }
     }

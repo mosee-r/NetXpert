@@ -88,7 +88,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {/* M-Lab diagnostics, data saver, and stream concurrency */}
           <div className="p-3.5 rounded-xl bg-[#15253D] border border-white/5 space-y-3">
             <div className="flex items-center justify-between">
-              <div>
+              <div className="min-w-0 flex-1 pr-3">
                 <span className="font-semibold text-slate-200 block flex items-center space-x-1.5">
                   <span>M-Lab deep TCP diagnostics</span>
                   <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
@@ -105,7 +105,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 role="switch"
                 aria-checked={useMlab}
                 aria-label="Run M-Lab deep TCP diagnostics"
-                className={`w-11 h-6 rounded-full transition-colors p-0.5 relative cursor-pointer ${
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
                   useMlab ? 'bg-cyan-500' : 'bg-slate-700'
                 }`}
               >
@@ -118,13 +118,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
 
             <div className="pt-2 border-t border-white/5 flex items-center justify-between">
-              <div>
+              <div className="min-w-0 flex-1 pr-3">
                 <span className="font-semibold text-slate-200 block">Data Saver Mode</span>
                 <span className="text-[11px] text-slate-400">Limits test transfer to &lt; 5 MB on mobile connections</span>
               </div>
               <button
+                type="button"
                 onClick={() => setDataSaverMode(!dataSaverMode)}
-                className={`w-11 h-6 rounded-full transition-colors p-0.5 relative cursor-pointer ${
+                role="switch"
+                aria-checked={dataSaverMode}
+                aria-label="Enable data saver mode"
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
                   dataSaverMode ? 'bg-cyan-500' : 'bg-slate-700'
                 }`}
               >

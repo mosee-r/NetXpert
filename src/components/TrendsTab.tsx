@@ -12,8 +12,10 @@ import {
   ChevronRight,
   Gauge,
   Sparkles,
+  Share2,
 } from 'lucide-react';
 import { exportReportToCsv, downloadFile, downloadPdfReport } from '../services/storage';
+import { shareOrDownloadSnapshot } from '../services/shareImageGenerator';
 
 interface TrendsTabProps {
   history: OverallAssessmentReport[];
@@ -59,14 +61,19 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
     }
   };
 
-  const handleExportJson = () => {
-    if (history.length === 0) return;
-    const json = JSON.stringify(history, null, 2);
-    try {
-      downloadFile(json, `speedxpat-history-${Date.now()}.json`, 'application/json');
-    } catch {
-      onExportError('The JSON export could not be started. Check available storage and try again.');
-    }
+  const handleExportPng = (report: OverallAssessmentReport) => {
+    void shareOrDownloadSnapshot({
+      testedAt: report.timestamp,
+      networkType: report.networkInfo.networkType,
+      downloadMbps: report.rawMeasurements.downloadThroughput.mbps,
+      uploadMbps: report.rawMeasurements.uploadThroughput.mbps,
+      idleLatencyMs: report.rawMeasurements.idleLatency.medianMs,
+      jitterMs: report.rawMeasurements.idleLatency.jitterMs,
+      overallRating: report.overallRating,
+      downloadSamples: report.rawMeasurements.downloadThroughput.samples.map(
+        ({ timestamp, instantMbps }) => ({ timestamp, instantMbps })
+      ),
+    }).catch(() => onExportError('The PNG could not be shared or exported. Try again.'));
   };
 
   return (
@@ -109,10 +116,12 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
               <span>CSV</span>
             </button>
             <button
-              onClick={handleExportJson}
+              onClick={() => handleExportPng(history[0])}
               className="px-3 py-1.5 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 text-xs font-medium text-slate-300 flex items-center space-x-1.5 cursor-pointer"
+              title="Share PNG report of latest run"
             >
-              <span>JSON</span>
+              <Share2 className="w-3.5 h-3.5" />
+              <span>Latest PNG</span>
             </button>
             <button
               onClick={onClearAllHistory}
@@ -227,6 +236,17 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
                     title="Export PDF Report"
                   >
                     <FileText className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleExportPng(item);
+                    }}
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800 transition-colors"
+                    title="Share PNG Report"
+                    aria-label="Share PNG Report"
+                  >
+                    <Share2 className="w-4 h-4" />
                   </button>
                   <button
                     onClick={(e) => {

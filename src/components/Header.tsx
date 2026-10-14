@@ -1,6 +1,5 @@
 import React from 'react';
 import {
-  SlidersHorizontal,
   Settings,
   History,
   CheckCircle2,
@@ -18,8 +17,6 @@ interface HeaderProps {
   isTesting: boolean;
   showSpeedResults: boolean;
   hasPendingResult: boolean;
-  advancedMode: boolean;
-  onToggleAdvancedMode: () => void;
   onCancelTest: () => void;
   onDiscardPendingResult: () => void;
   onRetest: () => void;
@@ -34,8 +31,6 @@ export const Header: React.FC<HeaderProps> = ({
   isTesting,
   showSpeedResults,
   hasPendingResult,
-  advancedMode,
-  onToggleAdvancedMode,
   onCancelTest,
   onDiscardPendingResult,
   onRetest,
@@ -150,21 +145,6 @@ export const Header: React.FC<HeaderProps> = ({
                 {savedCount}
               </span>
             )}
-          </button>
-
-          <button
-            type="button"
-            onClick={onToggleAdvancedMode}
-            aria-pressed={advancedMode}
-            className={`flex items-center space-x-1.5 px-3 py-2 rounded-xl border text-xs font-medium transition-all cursor-pointer ${
-              advancedMode
-                ? 'bg-app-accent/10 border-app-accent/40 text-app-accent-text'
-                : 'bg-[#0E1A2E] border-white/10 text-slate-300 hover:bg-[#15253D]'
-            }`}
-            title={advancedMode ? 'Switch to Simple Diagnostics Mode' : 'Switch to Advanced Diagnostics Mode'}
-          >
-            <SlidersHorizontal className="w-3.5 h-3.5 text-cyan-400" />
-            <span className="hidden sm:inline font-mono">{advancedMode ? 'Advanced' : 'Simple'}</span>
           </button>
 
           <button

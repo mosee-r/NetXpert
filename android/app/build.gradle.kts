@@ -11,6 +11,20 @@ val releaseSigningProperties = Properties().apply {
         releaseSigningPropertiesFile.inputStream().use(::load)
     }
 }
+val releaseStoreFile = releaseSigningProperties.getProperty("storeFile")
+    ?: System.getenv("ANDROID_KEYSTORE_PATH")
+val releaseStorePassword = releaseSigningProperties.getProperty("storePassword")
+    ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+val releaseKeyAlias = releaseSigningProperties.getProperty("keyAlias")
+    ?: System.getenv("ANDROID_KEY_ALIAS")
+val releaseKeyPassword = releaseSigningProperties.getProperty("keyPassword")
+    ?: System.getenv("ANDROID_KEY_PASSWORD")
+val hasReleaseSigning = listOf(
+    releaseStoreFile,
+    releaseStorePassword,
+    releaseKeyAlias,
+    releaseKeyPassword
+).all { !it.isNullOrBlank() }
 
 val webProjectRoot = rootProject.projectDir.parentFile
 val buildWebBundle = tasks.register<Exec>("buildWebBundle") {
@@ -40,19 +54,19 @@ android {
         applicationId = "com.pixelapps.speedxpat"
         minSdk = 26
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = providers.gradleProperty("releaseVersionCode").orElse("1").get().toInt()
+        versionName = providers.gradleProperty("releaseVersionName").orElse("1.0").get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     signingConfigs {
-        if (releaseSigningPropertiesFile.isFile) {
+        if (hasReleaseSigning) {
             create("release") {
-                storeFile = rootProject.file(releaseSigningProperties.getProperty("storeFile"))
-                storePassword = releaseSigningProperties.getProperty("storePassword")
-                keyAlias = releaseSigningProperties.getProperty("keyAlias")
-                keyPassword = releaseSigningProperties.getProperty("keyPassword")
+                storeFile = rootProject.file(requireNotNull(releaseStoreFile))
+                storePassword = requireNotNull(releaseStorePassword)
+                keyAlias = requireNotNull(releaseKeyAlias)
+                keyPassword = requireNotNull(releaseKeyPassword)
             }
         }
     }
@@ -60,7 +74,7 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
-            if (releaseSigningPropertiesFile.isFile) {
+            if (hasReleaseSigning) {
                 signingConfig = signingConfigs.getByName("release")
             }
             proguardFiles(
@@ -75,8 +89,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = "17"
+    kotlin {
+        compilerOptions {
+            jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+        }
     }
 
     buildFeatures {
@@ -86,12 +102,14 @@ android {
 
 tasks.matching { it.name == "packageRelease" }.configureEach {
     doFirst {
-        if (!releaseSigningPropertiesFile.isFile) {
-            throw GradleException("Release signing is not configured. Create android/keystore.properties.")
+        if (!hasReleaseSigning) {
+            throw GradleException(
+                "Release signing is not configured. Set android/keystore.properties or the " +
+                    "ANDROID_KEYSTORE_PATH, ANDROID_KEYSTORE_PASSWORD, ANDROID_KEY_ALIAS, and " +
+                    "ANDROID_KEY_PASSWORD environment variables."
+            )
         }
-        val keystorePath = releaseSigningProperties.getProperty("storeFile")
-            ?: throw GradleException("Release signing is missing storeFile in keystore.properties.")
-        if (!rootProject.file(keystorePath).isFile) {
+        if (!rootProject.file(requireNotNull(releaseStoreFile)).isFile) {
             throw GradleException("Release keystore was not found at the configured storeFile.")
         }
     }

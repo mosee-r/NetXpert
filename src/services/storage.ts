@@ -8,6 +8,7 @@
 
 import { OverallAssessmentReport } from '../types/scoring';
 import { getAndroidNativeBridge } from '../engines/testEndpoints';
+import { maskIpAddress } from '../utils/privacy';
 
 const STORAGE_KEY = 'speedxpat_assessment_history_v1';
 const LEGACY_STORAGE_KEY = 'netxpert_assessment_history_v1';
@@ -82,7 +83,7 @@ export function exportReportToCsv(report: OverallAssessmentReport): string {
     ['ISP ASN', report.networkInfo.asn || 'N/A'],
     ['Geography', `${report.networkInfo.locationCity || ''}, ${report.networkInfo.locationCountry || ''}`],
     ['Effective Transport', report.networkInfo.effectiveType || 'N/A'],
-    ['Public IP', report.networkInfo.ipAddress || 'Not recorded'],
+    ['Public IP', maskIpAddress(report.networkInfo.ipAddress)],
     [],
     ['Primary speed-test provider', 'Cloudflare Speed Test edge (automatically selected)'],
     ['Primary Speed-Test Server Details'],

@@ -349,8 +349,10 @@ export const DiagnosticToolsTab: React.FC = () => {
     if (isWifiLiveRef.current) {
       isWifiLiveRef.current = false;
       setIsWifiLive(false);
-      if (wifiScanTimeoutRef.current) clearTimeout(wifiScanTimeoutRef.current);
-      wifiScanTimeoutRef.current = null;
+      if (!isWifiScanInFlightRef.current && wifiScanTimeoutRef.current) {
+        clearTimeout(wifiScanTimeoutRef.current);
+        wifiScanTimeoutRef.current = null;
+      }
       setWifiScanMessage('Live scanning paused. Existing scan and signal history are kept on this device.');
       return;
     }
@@ -547,7 +549,7 @@ export const DiagnosticToolsTab: React.FC = () => {
               <div
                 role="status"
                 className={`rounded-xl border px-3 py-2 text-xs ${
-                  wifiScanMessage.includes('Scan complete')
+                  wifiScanMessage.toLowerCase().includes('scan updated')
                     ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-200'
                     : 'border-amber-500/20 bg-amber-950/20 text-amber-200'
                 }`}

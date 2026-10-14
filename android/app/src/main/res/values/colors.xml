@@ -1,9 +1,9 @@
 <resources>
-    <color name="speedxpat_canvas">#0B0F17</color>
-    <color name="speedxpat_surface">#131924</color>
-    <color name="speedxpat_primary_text">#F9FAFB</color>
-    <color name="speedxpat_muted_text">#9CA3AF</color>
+    <color name="speedxpat_canvas">#070B14</color>
+    <color name="speedxpat_surface">#0F172A</color>
+    <color name="speedxpat_primary_text">#F8FAFC</color>
+    <color name="speedxpat_muted_text">#94A3B8</color>
     <color name="speedxpat_divider">#1FFFFFFF</color>
-    <color name="speedxpat_accent">#3B82F6</color>
+    <color name="speedxpat_accent">#06B6D4</color>
     <color name="speedxpat_icon_background">@color/speedxpat_canvas</color>
 </resources>
