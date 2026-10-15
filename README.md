@@ -4,6 +4,9 @@ SpeedXpat is a network diagnostics and capability assessment app for measuring i
 
 It combines a Vite + React frontend, a small Node/Express server, and a native Android WebView shell so the same experience can run in the browser and on mobile.
 
+**Official repository:** [phillipsezria-glitch/SpeedXpat](https://github.com/phillipsezria-glitch/SpeedXpat)  
+**Live app:** [netxpert-pi.vercel.app](https://netxpert-pi.vercel.app)
+
 ## Features
 
 - Guided speed test for download and upload throughput
@@ -104,8 +107,8 @@ The project already includes a Vercel config in `vercel.json`.
 The repository includes a GitHub Actions workflow that publishes an Android release when a version tag is pushed.
 
 ```bash
-git tag v1.0.6
-git push origin v1.0.6
+git tag v1.0.8
+git push origin v1.0.8
 ```
 
 ## Privacy and Data Notes
@@ -114,7 +117,7 @@ SpeedXpat performs network measurements against external endpoints and may conta
 
 ## License
 
-This project currently does not include a repository license file. If you plan to publish or redistribute it publicly, add a license before release.
+This project is licensed under the Apache License 2.0. See [LICENSE](LICENSE) for details.
 
 ## Contributing
 

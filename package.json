@@ -2,6 +2,11 @@
   "name": "speedxpat",
   "private": true,
   "version": "0.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/phillipsezria-glitch/SpeedXpat.git"
+  },
+  "homepage": "https://netxpert-pi.vercel.app",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
