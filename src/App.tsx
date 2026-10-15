@@ -437,7 +437,6 @@ export default function App() {
         }
         hasPendingResult={pendingReport !== null}
         onCancelTest={handleCancelTest}
-        onDiscardPendingResult={handleDiscardResults}
         onRetest={handleStartTest}
         onOpenSettings={() => setIsSettingsOpen(true)}
         onOpenHistory={() => setActiveTab('trends')}
@@ -476,6 +475,7 @@ export default function App() {
           <SpeedTestHome
             networkInfo={networkInfo}
             report={showResults ? pendingReport ?? currentReport : null}
+            lastReport={currentReport}
             canDiscardResult={pendingReport !== null}
             isTesting={isTesting}
             stage={testStage}

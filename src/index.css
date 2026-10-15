@@ -269,18 +269,19 @@
   }
 }
 
-@keyframes startButtonGlow {
-  0%, 100% {
-    box-shadow: 0 0 24px -4px color-mix(in srgb, var(--app-accent) 68%, transparent), 0 0 48px -10px color-mix(in srgb, var(--app-accent) 42%, transparent);
-  }
-  50% {
-    box-shadow: 0 0 36px 2px color-mix(in srgb, var(--app-accent) 82%, transparent), 0 0 68px -4px color-mix(in srgb, var(--app-accent) 52%, transparent);
-  }
+@keyframes startButtonAura {
+  0%, 100% { opacity: 0.34; transform: scale(0.94); }
+  50% { opacity: 0.68; transform: scale(1.08); }
 }
 
 @keyframes gaugeArcPulse {
   0%, 100% { opacity: 0.82; }
   50% { opacity: 1; }
+}
+
+@keyframes gaugeHaloBreath {
+  0%, 100% { opacity: 0.38; transform: scale(0.94); }
+  50% { opacity: 0.68; transform: scale(1.08); }
 }
 
 @keyframes appViewEnter {
@@ -289,6 +290,19 @@
 }
 
 @layer utilities {
+  .speed-test-home {
+    padding-bottom: calc(80px + env(safe-area-inset-bottom));
+  }
+  .speed-gauge {
+    width: min(78vw, 34dvh, 380px);
+  }
+  .start-cta {
+    width: clamp(10rem, 48vw, 13rem);
+    aspect-ratio: 1;
+  }
+  .start-button-halo {
+    animation: startButtonAura 2.8s ease-in-out infinite;
+  }
   .glow-cyan {
     box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.45), 0 0 10px -2px rgba(56, 189, 248, 0.3);
   }
@@ -327,11 +341,11 @@
   .start-button-ring-delayed {
     animation: startButtonRing 3s ease-out 1.5s infinite;
   }
-  .start-button-glow {
-    animation: startButtonGlow 2.4s ease-in-out infinite;
-  }
   .gauge-active-arc {
     animation: gaugeArcPulse 1.8s ease-in-out infinite;
+  }
+  .gauge-halo-running {
+    animation: gaugeHaloBreath 3s ease-in-out infinite;
   }
   .app-view-enter,
   .test-state-enter {
@@ -344,8 +358,9 @@
     .splash-title,
     .start-button-ring,
     .start-button-ring-delayed,
-    .start-button-glow,
+    .start-button-halo,
     .gauge-active-arc,
+    .gauge-halo-running,
     .app-view-enter,
     .test-state-enter {
       animation: none;

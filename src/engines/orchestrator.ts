@@ -175,7 +175,7 @@ export class AssessmentOrchestrator {
           const mb = (bytes / (1024 * 1024)).toFixed(1);
           notify(
             'measuring_download',
-            `Downloading primary test payload (${mb} MB)...`,
+            'Measuring download speed',
             Math.min(100, Math.round((bytes / (8 * 1024 * 1024)) * 100)),
             50 + Math.min(20, Math.round((bytes / (8 * 1024 * 1024)) * 20)),
             'Download',
@@ -206,7 +206,7 @@ export class AssessmentOrchestrator {
           const mb = (bytes / (1024 * 1024)).toFixed(1);
           notify(
             'measuring_upload',
-            `Uploading primary test payload (${mb} MB)...`,
+            'Measuring upload speed',
             Math.min(100, Math.round((bytes / (4 * 1024 * 1024)) * 100)),
             70 + Math.min(15, Math.round((bytes / (4 * 1024 * 1024)) * 15)),
             'Upload',

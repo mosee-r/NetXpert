@@ -99,7 +99,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             <button
               onClick={handleRefresh}
               disabled={isRefreshing}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 text-xs font-medium text-slate-300 hover:text-cyan-300 transition-all cursor-pointer disabled:opacity-50"
+              className="flex min-h-11 items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 text-xs font-medium text-slate-300 hover:text-cyan-300 transition-all cursor-pointer disabled:opacity-50"
               title="Refresh network information and perform live ipinfo.io lookup"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-cyan-400' : ''}`} />

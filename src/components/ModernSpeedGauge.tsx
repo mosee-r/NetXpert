@@ -26,7 +26,6 @@ const PHASE_COLORS: Record<SpeedTestPhase, { primary: string; text: string; glow
   completed: { primary: '#10b981', text: '#34d399', glow: 'rgba(16, 185, 129, 0.4)' },
 };
 
-const SCALE_TICKS = [0, 1, 5, 10, 20, 30, 40, 50, 60, 80, 100];
 const CENTER = 150;
 const RADIUS = 116;
 const START_ANGLE = 250;
@@ -43,19 +42,6 @@ function polarToCartesian(radius: number, angle: number) {
     x: CENTER + radius * Math.sin(radians),
     y: CENTER - radius * Math.cos(radians),
   };
-}
-
-function valueToProgress(value: number, ticks: number[]): number {
-  const boundedValue = Math.max(ticks[0], Math.min(value, ticks[ticks.length - 1]));
-  for (let index = 0; index < ticks.length - 1; index++) {
-    const lower = ticks[index];
-    const upper = ticks[index + 1];
-    if (boundedValue <= upper) {
-      const segment = (boundedValue - lower) / Math.max(upper - lower, Number.EPSILON);
-      return (index + segment) / (ticks.length - 1);
-    }
-  }
-  return 1;
 }
 
 function formatTick(value: number): string {
@@ -118,16 +104,13 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [safeValue]);
 
   const safeMax = Math.min(MAX_DIAL_MAX, Math.max(MIN_DIAL_MAX, dialMax));
-  const tickMultiplier = safeMax / SCALE_TICKS[SCALE_TICKS.length - 1];
-  const ticks = SCALE_TICKS.map((tick) => tick * tickMultiplier);
-  const progress = safeValue === null ? 0 : valueToProgress(safeValue, ticks);
+  const progress = safeValue === null ? 0 : Math.max(0, Math.min(safeValue / safeMax, 1));
   const targetAngle = START_ANGLE + progress * SWEEP_ANGLE;
   const start = polarToCartesian(RADIUS, START_ANGLE);
   const end = polarToCartesian(RADIUS, START_ANGLE + SWEEP_ANGLE);
   const arcPath = `M ${start.x} ${start.y} A ${RADIUS} ${RADIUS} 0 1 1 ${end.x} ${end.y}`;
   const speedLabel = formatSpeed(safeValue);
   const phaseLabel = statusLabel || PHASE_LABELS[phase];
-  const targetTip = polarToCartesian(RADIUS - 22, targetAngle);
 
   useEffect(() => {
     const physics = physicsRef.current;
@@ -176,16 +159,13 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [targetAngle, prefersReducedMotion]);
 
   return (
-    <div className="mx-auto my-2 w-full max-w-[320px] select-none pt-7 lg:max-w-[380px]">
+    <div className="speed-gauge mx-auto my-2 select-none pt-7">
       <div className="relative flex items-center justify-center">
-        {/* Ambient Pulsing Backlight Halo */}
         <div
-          className={`absolute inset-4 rounded-full blur-2xl transition-all duration-500 pointer-events-none ${
-            isRunning ? 'opacity-70 scale-105' : 'opacity-25 scale-100'
-          }`}
-          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 70%)` }}
+          className={`gauge-halo pointer-events-none absolute inset-[12%] rounded-full blur-2xl ${isRunning ? 'gauge-halo-running' : ''}`}
+          style={{ background: `radial-gradient(circle, ${theme.glow} 0%, transparent 72%)` }}
+          aria-hidden="true"
         />
-
         <svg
           viewBox="0 0 300 240"
           className="relative block h-auto w-full overflow-visible"
@@ -194,12 +174,12 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
         >
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="#00f5ee" />
-              <stop offset="48%" stopColor="#05c8f5" />
-              <stop offset="100%" stopColor="#1648ff" />
+              <stop offset="0%" stopColor="#00d6ca" />
+              <stop offset="52%" stopColor={theme.primary} />
+              <stop offset="100%" stopColor="#3478d4" />
             </linearGradient>
             <filter id={glowId} x="-30%" y="-30%" width="160%" height="160%">
-              <feGaussianBlur stdDeviation="5" result="blur" />
+              <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
@@ -211,75 +191,70 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
           <path
             d={arcPath}
             fill="none"
-            stroke="rgba(30, 41, 59, 0.85)"
-            strokeWidth="16"
-            strokeLinecap="round"
-          />
-          <path
-            d={arcPath}
-            fill="none"
-            stroke="rgba(255, 255, 255, 0.04)"
-            strokeWidth="16"
+            stroke="var(--app-divider-strong)"
+            strokeWidth="14"
             strokeLinecap="round"
           />
 
-          {/* Glowing Active Speed Arc */}
+          {/* Gradient Active Speed Arc */}
           <path
             ref={activeArcRef}
             d={arcPath}
             fill="none"
             stroke={`url(#${gradientId})`}
-            strokeWidth="16"
+            strokeWidth="14"
             strokeLinecap="round"
             pathLength="100"
             strokeDasharray="100 100"
             strokeDashoffset={100 * (1 - progress)}
             filter={`url(#${glowId})`}
-            className={isRunning ? 'gauge-active-arc' : undefined}
+            className={isRunning ? 'gauge-active-arc transition-[stroke-dashoffset] duration-500 ease-out motion-reduce:transition-none' : undefined}
           />
 
-          {/* Tick Marks & Labels */}
-          {ticks.map((tick, index) => {
-            const angle = START_ANGLE + (index / (ticks.length - 1)) * SWEEP_ANGLE;
+          {/* Fine tick marks with only three numeric labels. */}
+          {Array.from({ length: 11 }, (_, index) => index / 10).map((fraction) => {
+            const angle = START_ANGLE + fraction * SWEEP_ANGLE;
             const outer = polarToCartesian(RADIUS - 8, angle);
-            const inner = polarToCartesian(RADIUS - 16, angle);
-            const label = polarToCartesian(78, angle);
-            const isMajor = index === 0 || index === ticks.length - 1 || index % 2 === 0;
+            const inner = polarToCartesian(RADIUS - (fraction === 0 || fraction === 0.5 || fraction === 1 ? 18 : 14), angle);
+            const showLabel = fraction === 0 || fraction === 0.5 || fraction === 1;
+            const label = polarToCartesian(82, angle);
+            const tickValue = safeMax * fraction;
             return (
-              <g key={`tick-${index}`} aria-hidden="true">
+              <g key={`tick-${fraction}`} aria-hidden="true">
                 <line
                   x1={inner.x}
                   y1={inner.y}
                   x2={outer.x}
                   y2={outer.y}
-                  stroke={isMajor ? '#94a3b8' : 'rgba(148, 163, 184, 0.35)'}
-                  strokeWidth={isMajor ? 2 : 1}
+                  stroke="var(--app-muted)"
+                  strokeWidth={showLabel ? 2 : 1}
                   strokeLinecap="round"
                 />
-                <text
-                  x={label.x}
-                  y={label.y + 3}
-                  fill="#94a3b8"
-                  fontSize="8.5"
-                  fontWeight="600"
-                  fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
-                  textAnchor="middle"
-                >
-                  {formatTick(tick)}
-                </text>
+                {showLabel && (
+                  <text
+                    x={label.x}
+                    y={label.y + 3}
+                    fill="var(--app-secondary)"
+                    fontSize="11"
+                    fontWeight="700"
+                    fontFamily="ui-monospace, SFMono-Regular, Menlo, monospace"
+                    textAnchor="middle"
+                  >
+                    {formatTick(tickValue)}
+                  </text>
+                )}
               </g>
             );
           })}
 
-          {/* Animated Needle */}
           {isRunning && (
             <>
               <line
                 ref={needleRef}
                 x1={CENTER}
                 y1={CENTER}
-                x2={targetTip.x}
-                y2={targetTip.y}
+                x2={CENTER}
+                y2={CENTER - RADIUS + 22}
                 stroke={theme.text}
                 strokeWidth="3"
                 strokeLinecap="round"
@@ -287,14 +262,15 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
               />
               <circle
                 ref={needleTipRef}
-                cx={targetTip.x}
-                cy={targetTip.y}
-                r="4.5"
-                fill="#ffffff"
-                filter={`url(#${glowId})`}
+                cx={CENTER}
+                cy={CENTER - RADIUS + 22}
+                r="4"
+                fill="var(--app-primary)"
+                stroke={theme.text}
+                strokeWidth="1.5"
               />
-              <circle cx={CENTER} cy={CENTER} r="8" fill="rgba(15, 23, 42, 0.9)" stroke={theme.text} strokeWidth="2" />
-              <circle cx={CENTER} cy={CENTER} r="3.5" fill={theme.text} />
+              <circle cx={CENTER} cy={CENTER} r="7" fill="var(--app-canvas)" stroke={theme.text} strokeWidth="2" />
+              <circle cx={CENTER} cy={CENTER} r="2.5" fill={theme.text} />
             </>
           )}
 
@@ -309,7 +285,6 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
             fontWeight="800"
             style={{
               fontVariantNumeric: 'tabular-nums',
-              filter: `drop-shadow(0 0 10px ${theme.glow})`,
             }}
           >
             {speedLabel}

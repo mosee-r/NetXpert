@@ -1,5 +1,5 @@
-import React from 'react';
-import { FileText, Power, Share2, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { AlertTriangle, CheckCircle2, FileText, HelpCircle, Share2, X, XCircle } from 'lucide-react';
 import { DeviceNetworkInfo, ThroughputChartPoint } from '../types/network';
 import { ActivityRating, OverallAssessmentReport } from '../types/scoring';
 import { AssessmentStage } from '../engines/orchestrator';
@@ -10,6 +10,7 @@ import { WorkloadSuitability } from './WorkloadSuitability';
 import { DetailedTestBreakdown } from './DetailedTestBreakdown';
 import { downloadPdfReport } from '../services/storage';
 import { shareOrDownloadSnapshot } from '../services/shareImageGenerator';
+import { maskIpAddress } from '../utils/privacy';
 
 const TEST_PHASES = [
   { key: 'setup', label: 'Setup' },
@@ -77,8 +78,8 @@ const PhaseHud: React.FC<{ stage: AssessmentStage }> = ({ stage }) => {
                 : 'bg-app-divider-strong'
             }`}
               />
-            <span className={`block truncate font-mono text-[9px] uppercase sm:text-[10px] ${
-              state === 'active' ? 'font-semibold text-app-primary' : 'text-app-muted'
+            <span className={`block truncate text-[11px] font-medium uppercase ${
+              state === 'active' ? 'font-semibold text-app-primary' : 'text-app-secondary'
             }`}>
               {phase.label}
             </span>
@@ -92,6 +93,7 @@ const PhaseHud: React.FC<{ stage: AssessmentStage }> = ({ stage }) => {
 interface SpeedTestHomeProps {
   networkInfo: DeviceNetworkInfo | null;
   report: OverallAssessmentReport | null;
+  lastReport: OverallAssessmentReport | null;
   canDiscardResult: boolean;
   isTesting: boolean;
   stage: AssessmentStage;
@@ -119,6 +121,7 @@ interface SpeedTestHomeProps {
 export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   networkInfo,
   report,
+  lastReport,
   canDiscardResult,
   isTesting,
   stage,
@@ -206,6 +209,27 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           : ''
       }`
     : '';
+  const lastTestSummary = lastReport
+    ? (() => {
+        const elapsedMs = Math.max(0, Date.now() - new Date(lastReport.timestamp).getTime());
+        const elapsedMinutes = Math.floor(elapsedMs / 60_000);
+        const elapsedHours = Math.floor(elapsedMinutes / 60);
+        const elapsedDays = Math.floor(elapsedHours / 24);
+        const age = elapsedMinutes < 1
+          ? 'just now'
+          : elapsedMinutes < 60
+          ? `${elapsedMinutes} min ago`
+          : elapsedHours < 24
+          ? `${elapsedHours} h ago`
+          : `${elapsedDays} d ago`;
+        const download = lastReport.rawMeasurements.downloadThroughput.mbps;
+        const upload = lastReport.rawMeasurements.uploadThroughput.mbps;
+        return `Last test · ${download === null ? '--' : `${download.toFixed(1)} Mbps`} down / ${upload === null ? '--' : `${upload.toFixed(1)} Mbps`} up · ${age}`;
+      })()
+    : null;
+  const networkContext = [networkInfo?.ispName, networkInfo?.locationCity]
+    .filter((value): value is string => Boolean(value))
+    .join(' · ');
   const connectionStatus = networkInfo?.online === undefined
     ? 'Tap Start to check your internet speed'
     : networkInfo.online
@@ -218,14 +242,66 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     : report?.overallRating === 'poor'
     ? 'border-app-danger/25 bg-app-danger-soft text-app-danger'
     : 'border-app-divider bg-app-raised text-app-secondary';
+  const RatingIcon = report?.overallRating === 'excellent' || report?.overallRating === 'good'
+    ? CheckCircle2
+    : report?.overallRating === 'fair'
+    ? AlertTriangle
+    : report?.overallRating === 'poor'
+    ? XCircle
+    : HelpCircle;
+  const [showPublicIp, setShowPublicIp] = useState(false);
+  const idleLatency = report?.rawMeasurements.loadedLatency.baselineLatencyMs
+    ?? report?.rawMeasurements.idleLatency.medianMs
+    ?? null;
+  const loadedLatency = report?.rawMeasurements.loadedLatency.underLoadLatencyMs ?? null;
+  const latencyDelta = report?.rawMeasurements.loadedLatency.loadedDeltaMs ?? null;
+  const latencyScale = Math.max(idleLatency ?? 0, loadedLatency ?? 0, 1);
+  const latencyTone = (value: number) => value < 50
+    ? 'good'
+    : value <= 100
+    ? 'warning'
+    : 'poor';
+  const deltaTone = (value: number) => value > 100
+    ? 'poor'
+    : value > 30
+    ? 'warning'
+    : 'good';
+  const toneClasses = {
+    good: 'bg-emerald-400 text-emerald-300',
+    warning: 'bg-amber-400 text-amber-300',
+    poor: 'bg-rose-400 text-rose-300',
+  };
+  const formatCountryName = (countryCode: string | undefined) => {
+    if (!countryCode) return 'Not available';
+    try {
+      return new Intl.DisplayNames(undefined, { type: 'region' }).of(countryCode) || countryCode;
+    } catch {
+      return countryCode;
+    }
+  };
+  const resultDate = report
+    ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
+        .format(new Date(report.timestamp))
+    : '';
+  const ratingTextTone = report?.overallRating === 'excellent' || report?.overallRating === 'good'
+    ? 'text-app-success'
+    : report?.overallRating === 'fair'
+    ? 'text-app-warning'
+    : report?.overallRating === 'poor'
+    ? 'text-app-danger'
+    : 'text-app-secondary';
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 pb-24 lg:px-6">
+    <div className="speed-test-home mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 lg:px-6">
       {!isTesting && !report ? (
         <section key="ready" className="test-state-enter flex flex-1 items-center justify-center py-8" aria-label="Speed test ready">
           <div className="flex w-full flex-col items-center px-4 text-center">
-            <p className="mb-8 text-sm text-app-secondary">{connectionStatus}</p>
+            <p className="mb-3 text-sm text-app-secondary">{connectionStatus}</p>
+            {lastTestSummary && (
+              <p className="mb-5 text-xs text-app-muted">{lastTestSummary}</p>
+            )}
             <div className="relative flex items-center justify-center">
+              <span className="start-button-halo pointer-events-none absolute -inset-6 rounded-full bg-app-accent/30 blur-2xl" aria-hidden="true" />
               <span className="pointer-events-none absolute -inset-2 rounded-full border border-app-accent/25" aria-hidden="true" />
               <span className="pointer-events-none absolute -inset-3 rounded-full border border-app-accent/40 start-button-ring" aria-hidden="true" />
               <span className="pointer-events-none absolute -inset-5 rounded-full border border-app-accent/20 start-button-ring-delayed" aria-hidden="true" />
@@ -234,19 +310,16 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                 disabled={isTesting}
                 aria-label="Start speed test"
                 aria-busy={isTesting}
-                className="start-button-glow group relative inline-flex h-32 w-32 items-center justify-center rounded-full bg-app-accent text-[#071421] transition-all duration-200 hover:scale-[1.04] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
+                className="start-cta group relative inline-flex items-center justify-center rounded-full bg-app-accent text-[#071421] shadow-md transition-all duration-200 hover:scale-[1.04] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
               >
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <Power className="h-10 w-10 transition-transform duration-300 group-hover:rotate-12" aria-hidden="true" />
-                </span>
-                <span className="absolute inset-x-0 bottom-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#071421]">
-                  START
+                <span className="text-xl font-bold uppercase text-[#071421] sm:text-2xl">
+                  Start
                 </span>
               </button>
             </div>
-            <p className="mt-6 text-[10px] font-mono uppercase tracking-[0.28em] text-app-muted">
-              {isTesting ? 'Starting probe…' : 'Diagnostic Probe Ready'}
-            </p>
+            {networkContext && (
+              <p className="mt-5 text-sm text-app-secondary">{networkContext}</p>
+            )}
           </div>
         </section>
       ) : isTesting ? (
@@ -312,17 +385,96 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           </div>
         </section>
       ) : report ? (
-        <section key="results" className="test-state-enter mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 pt-2 pb-24" aria-label="Speed test results">
-          <div className="space-y-3 border-b border-app-divider pb-5">
+        <section key="results" className="test-state-enter mx-auto flex w-full max-w-4xl flex-1 flex-col gap-2 pt-2 pb-24 sm:gap-4" aria-label="Speed test results">
+          <div className="space-y-2 border-b border-app-divider pb-3 sm:space-y-3 sm:pb-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <h2 className="text-xl font-semibold capitalize text-app-primary">
-                {report.overallRating.replace(/_/g, ' ')} connection
+              <h2 className={`inline-flex items-center gap-2 text-xl font-semibold capitalize ${ratingTextTone}`}>
+                <RatingIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
+                <span>{report.overallRating.replace(/_/g, ' ')} connection</span>
               </h2>
               <time className="font-mono text-xs text-app-muted" dateTime={report.timestamp}>
-                {new Date(report.timestamp).toLocaleDateString()}
+                {resultDate}
               </time>
             </div>
             <p className="max-w-2xl text-xs leading-5 text-app-secondary">{resultSummary}</p>
+            <div className="flex flex-wrap items-center gap-2 pt-1">
+              <button
+                onClick={onSaveAndClose}
+                className="min-h-11 rounded-lg bg-app-accent px-4 text-sm font-semibold text-[#071421] transition-colors hover:bg-app-accent-hover"
+              >
+                {canDiscardResult ? 'Save and close' : 'Close results'}
+              </button>
+              {canDiscardResult && (
+                <button
+                  onClick={onDiscardResults}
+                  className="min-h-11 rounded-lg border border-app-divider px-4 text-sm font-medium text-app-secondary transition-colors hover:bg-app-raised"
+                >
+                  Discard result
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (canDiscardResult && !window.confirm('Discard this unsaved result and start a new test?')) return;
+                  onStartTest();
+                }}
+                className="min-h-11 rounded-lg border border-app-divider px-4 text-sm font-medium text-app-secondary transition-colors hover:bg-app-raised"
+              >
+                Test again
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:gap-y-2" aria-label="Activity suitability summary">
+            {report.activities.map((activity) => {
+              const activityRating = activity.rating;
+              const activityTone = activityRating === 'excellent' || activityRating === 'good'
+                ? 'text-emerald-300'
+                : activityRating === 'fair'
+                ? 'text-amber-300'
+                : activityRating === 'poor'
+                ? 'text-rose-300'
+                : 'text-app-muted';
+              const activityDot = activityRating === 'excellent' || activityRating === 'good'
+                ? 'bg-emerald-400'
+                : activityRating === 'fair'
+                ? 'bg-amber-400'
+                : activityRating === 'poor'
+                ? 'bg-rose-400'
+                : 'bg-slate-500';
+              const activityLabel = activityRating === 'excellent'
+                ? 'Great'
+                : activityRating === 'good'
+                ? 'OK'
+                : activityRating === 'fair'
+                ? 'Fair'
+                : activityRating === 'poor'
+                ? 'Risky'
+                : 'Not tested';
+              const shortActivityName: Record<string, string> = {
+                gaming: 'Gaming',
+                streaming: 'Streaming',
+                conferencing: 'Video calls',
+                browsing: 'Browsing',
+                remote_work: 'Remote work',
+                transfers: 'Transfers',
+              };
+              return (
+                <div key={activity.activityId} className="min-w-0 border-b border-app-divider py-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="truncate text-[11px] font-semibold text-app-primary sm:text-xs" title={activity.displayName}>
+                      {shortActivityName[activity.activityId] || activity.displayName}
+                    </span>
+                    <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold ${activityTone}`}>
+                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${activityDot}`} />
+                      {activityLabel}
+                    </span>
+                  </div>
+                  <p className="mt-1 hidden text-[11px] leading-4 text-app-muted sm:line-clamp-2 sm:block" title={activity.summary}>
+                    {activity.summary}
+                  </p>
+                </div>
+              );
+            })}
           </div>
 
           <TwinThroughputCards
@@ -334,23 +486,80 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             compact
           />
 
+          <section className="border-y border-app-divider py-3" aria-label="Latency comparison under load">
+            <div className="mb-3 flex items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-app-primary">Latency under load</h3>
+              {latencyDelta !== null && (
+                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${toneClasses[deltaTone(latencyDelta)].split(' ')[1]}`}>
+                  <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${toneClasses[deltaTone(latencyDelta)].split(' ')[0]}`} />
+                  +{Math.round(latencyDelta)} ms
+                </span>
+              )}
+            </div>
+            {[
+              { label: 'Idle', value: idleLatency },
+              { label: 'Loaded', value: loadedLatency },
+            ].map((row) => {
+              const tone = row.value === null ? 'warning' : latencyTone(row.value);
+              return (
+                <div key={row.label} className="mb-2 last:mb-0">
+                  <div className="mb-1 flex items-center justify-between text-xs">
+                    <span className="text-app-secondary">{row.label}</span>
+                    <span className={`font-mono font-semibold ${toneClasses[tone].split(' ')[1]}`}>
+                      {row.value === null ? 'Not measured' : `${Math.round(row.value)} ms`}
+                    </span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-app-divider" aria-hidden="true">
+                    <div
+                      className={`h-full rounded-full ${toneClasses[tone].split(' ')[0]}`}
+                      style={{ width: row.value === null ? '0%' : `${Math.max(4, (row.value / latencyScale) * 100)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })}
+          </section>
+
           <KeyMetricsList
             metrics={metrics}
             includeThroughput={false}
+            includeLatency={false}
             additionalRows={[
+              {
+                label: 'Jitter',
+                value: metrics.jitterMs === null ? 'Not measured' : `${metrics.jitterMs.toFixed(1)} ms`,
+                status: metrics.jitterMs === null ? undefined : metrics.jitterMs > 30 ? 'poor' : 'good',
+              },
               {
                 label: 'DNS resolution',
                 value: report.rawMeasurements.dnsTiming.durationMs === null
                   ? 'Not measured'
                   : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
               },
-              { label: 'Public IP', value: report.networkInfo.ipAddress || 'Not recorded' },
-              { label: 'Country', value: report.networkInfo.locationCountry || 'Not available' },
+              {
+                label: 'Public IP',
+                value: report.networkInfo.ipAddress
+                  ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
+                  : 'Not recorded',
+              },
+              { label: 'Country', value: formatCountryName(report.networkInfo.locationCountry) },
               { label: 'City', value: report.networkInfo.locationCity || 'Not available' },
-              { label: 'Network', value: report.networkInfo.networkType },
+              ...(report.networkInfo.networkType !== 'unknown'
+                ? [{ label: 'Network', value: report.networkInfo.networkType }]
+                : []),
               { label: 'Provider', value: report.networkInfo.ispName || report.networkInfo.asnOrg || 'Not available' },
             ]}
           />
+          {report.networkInfo.ipAddress && (
+            <button
+              type="button"
+              onClick={() => setShowPublicIp((visible) => !visible)}
+              className="-mt-3 min-h-11 self-start text-xs font-medium text-app-accent-text hover:text-app-primary"
+              aria-pressed={showPublicIp}
+            >
+              {showPublicIp ? 'Hide public IP' : 'Reveal public IP'}
+            </button>
+          )}
 
           <details className="group border-b border-app-divider py-3">
             <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
@@ -398,13 +607,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
               <span>Share PNG</span>
             </button>
           </div>
-
-          <button
-            onClick={onSaveAndClose}
-              className="min-h-12 w-full rounded-lg bg-app-accent px-5 text-sm font-semibold text-[#071421] transition-colors hover:bg-app-accent-hover"
-          >
-            {canDiscardResult ? 'Save and close' : 'Close results'}
-          </button>
 
         </section>
       ) : null}

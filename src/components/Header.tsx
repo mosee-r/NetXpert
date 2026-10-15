@@ -18,7 +18,6 @@ interface HeaderProps {
   showSpeedResults: boolean;
   hasPendingResult: boolean;
   onCancelTest: () => void;
-  onDiscardPendingResult: () => void;
   onRetest: () => void;
   onOpenSettings: () => void;
   onOpenHistory: () => void;
@@ -32,7 +31,6 @@ export const Header: React.FC<HeaderProps> = ({
   showSpeedResults,
   hasPendingResult,
   onCancelTest,
-  onDiscardPendingResult,
   onRetest,
   onOpenSettings,
   onOpenHistory,
@@ -40,31 +38,20 @@ export const Header: React.FC<HeaderProps> = ({
 }) => {
   const isOnline = networkInfo?.online ?? true;
   const title = activeTab === 'speed'
-    ? showSpeedResults ? 'Result' : 'SpeedTest'
+    ? showSpeedResults ? 'Result' : 'SpeedXpat'
     : activeTab === 'network'
     ? 'Network'
     : activeTab === 'tools'
     ? 'Tools'
     : 'Trends';
   const isDiscardableResult = activeTab === 'speed' && showSpeedResults && hasPendingResult;
-  const leftAction = activeTab === 'speed' && isTesting
-    ? onCancelTest
-    : isDiscardableResult
-    ? onDiscardPendingResult
-    : onOpenSettings;
-  const LeftIcon = activeTab === 'speed' && isTesting
-    ? X
-    : isDiscardableResult
-    ? Trash2
-    : Settings;
-  const leftLabel = activeTab === 'speed' && isTesting
-    ? 'Cancel test'
-    : isDiscardableResult
-    ? 'Discard unsaved result'
-    : 'Open app settings';
-  const rightAction = activeTab === 'speed' && showSpeedResults ? onRetest : onOpenHistory;
-  const RightIcon = activeTab === 'speed' && showSpeedResults ? RotateCcw : History;
-  const rightLabel = activeTab === 'speed' && showSpeedResults ? 'Retest connection' : 'View history and reports';
+  const leftAction = activeTab === 'speed' && isTesting ? onCancelTest : onOpenSettings;
+  const LeftIcon = activeTab === 'speed' && isTesting ? X : Settings;
+  const leftLabel = activeTab === 'speed' && isTesting ? 'Cancel test' : 'Open app settings';
+  const canRetest = activeTab === 'speed' && showSpeedResults && !hasPendingResult;
+  const rightAction = canRetest ? onRetest : onOpenHistory;
+  const RightIcon = canRetest ? RotateCcw : History;
+  const rightLabel = canRetest ? 'Retest connection' : 'View history and reports';
 
   return (
     <header className="sticky top-0 z-40 h-14 shrink-0 border-b border-app-divider bg-app-canvas/95 text-app-primary backdrop-blur sm:h-[68px]">
@@ -72,7 +59,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={leftAction}
-          className="grid h-9 w-9 place-items-center rounded-full text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary sm:hidden"
+          className="grid h-11 w-11 place-items-center rounded-full text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary sm:hidden"
           aria-label={leftLabel}
           title={leftLabel}
         >
@@ -109,7 +96,7 @@ export const Header: React.FC<HeaderProps> = ({
         <button
           type="button"
           onClick={rightAction}
-          className="grid h-9 w-9 place-items-center rounded-full text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary sm:hidden"
+          className="grid h-11 w-11 place-items-center rounded-full text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary sm:hidden"
           aria-label={rightLabel}
           title={rightLabel}
         >
@@ -117,25 +104,23 @@ export const Header: React.FC<HeaderProps> = ({
         </button>
 
         <div className="hidden items-center space-x-2 sm:flex">
-          {(activeTab === 'speed' && (isTesting || isDiscardableResult || showSpeedResults)) && (
+          {(activeTab === 'speed' && (isTesting || showSpeedResults)) && (
             <button
               type="button"
-              onClick={isTesting ? onCancelTest : isDiscardableResult ? onDiscardPendingResult : onRetest}
+              onClick={isTesting ? onCancelTest : onRetest}
               className="grid h-10 w-10 place-items-center rounded-xl border border-white/10 bg-[#0E1A2E] text-slate-300 transition-colors hover:bg-[#15253D]"
-              aria-label={isTesting ? 'Cancel test' : isDiscardableResult ? 'Discard unsaved result' : 'Retest connection'}
-              title={isTesting ? 'Cancel test' : isDiscardableResult ? 'Discard unsaved result' : 'Retest connection'}
+              aria-label={isTesting ? 'Cancel test' : 'Retest connection'}
+              title={isTesting ? 'Cancel test' : 'Retest connection'}
             >
               {isTesting
                 ? <X className="h-4 w-4" />
-                : isDiscardableResult
-                ? <Trash2 className="h-4 w-4" />
                 : <RotateCcw className="h-4 w-4" />}
             </button>
           )}
           <button
             type="button"
             onClick={onOpenHistory}
-            className="w-10 h-10 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition-all relative cursor-pointer"
+            className="h-11 w-11 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 flex items-center justify-center text-slate-300 hover:text-white transition-all relative cursor-pointer"
             title="View History & Reports"
             aria-label="View History & Reports"
           >
@@ -150,7 +135,7 @@ export const Header: React.FC<HeaderProps> = ({
           <button
             type="button"
             onClick={onOpenSettings}
-            className="w-10 h-10 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all cursor-pointer"
+            className="h-11 w-11 rounded-xl bg-[#0E1A2E] hover:bg-[#15253D] border border-white/10 flex items-center justify-center text-slate-300 hover:text-cyan-400 transition-all cursor-pointer"
             title="Open App & Diagnostics Settings"
           >
             <Settings className="w-4 h-4" />

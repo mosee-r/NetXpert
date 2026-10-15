@@ -12,7 +12,7 @@ interface KeyMetricsListProps {
   metrics: SpeedMetrics;
   includeThroughput?: boolean;
   includeLatency?: boolean;
-  additionalRows?: { label: string; value: string }[];
+  additionalRows?: { label: string; value: string; status?: 'good' | 'warning' | 'poor' }[];
 }
 
 export const KeyMetricsList: React.FC<KeyMetricsListProps> = ({
@@ -46,21 +46,29 @@ export const KeyMetricsList: React.FC<KeyMetricsListProps> = ({
     },
     ...latencyRows,
   ];
-  const rows = [
+  const rows: { label: string; value: string; status?: 'good' | 'warning' | 'poor' }[] = [
     ...(includeThroughput ? throughputRows : []),
     ...(!includeThroughput && includeLatency ? latencyRows : []),
     ...additionalRows,
   ];
   return (
     <dl
-      className="grid w-full grid-cols-2 gap-x-5 gap-y-2 sm:grid-cols-3"
+      className="grid w-full grid-cols-2 gap-x-4 gap-y-0 sm:grid-cols-3 sm:gap-y-2"
       aria-label="Speed test metrics"
     >
       {rows.map((row) => (
-        <div key={row.label} className="min-w-0 border-b border-app-divider/70 py-2">
+        <div key={row.label} className="min-w-0 border-b border-app-divider/70 py-1 sm:py-2">
           <dt className="truncate text-[11px] text-app-muted">{row.label}</dt>
-          <dd className="mt-0.5 truncate font-mono text-sm font-semibold tabular-nums text-app-primary" title={row.value}>
-            {row.value}
+          <dd className="mt-0.5 flex min-w-0 items-center gap-1.5 font-mono text-sm font-semibold tabular-nums text-app-primary" title={row.value}>
+            {row.status && (
+              <span
+                aria-label={row.status}
+                className={`h-1.5 w-1.5 shrink-0 rounded-full ${
+                  row.status === 'good' ? 'bg-emerald-400' : row.status === 'warning' ? 'bg-amber-400' : 'bg-rose-400'
+                }`}
+              />
+            )}
+            <span className="min-w-0 truncate">{row.value}</span>
           </dd>
         </div>
       ))}

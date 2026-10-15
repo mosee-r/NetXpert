@@ -18,31 +18,20 @@ interface TwinThroughputCardsProps {
 interface MiniSparklineProps {
   samples: ThroughputCardSample[];
   isActive: boolean;
+  isWaiting?: boolean;
   label: string;
   accentColor: string;
   compact?: boolean;
 }
 
-function generateSmoothPath(points: { x: number; y: number }[]): string {
+function generateLinePath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return '';
-  let d = `M ${points[0].x.toFixed(2)} ${points[0].y.toFixed(2)}`;
-  for (let i = 0; i < points.length - 1; i++) {
-    const p0 = points[i === 0 ? i : i - 1];
-    const p1 = points[i];
-    const p2 = points[i + 1];
-    const p3 = points[i + 2 < points.length ? i + 2 : i + 1];
-
-    const cp1x = p1.x + (p2.x - p0.x) / 6;
-    const cp1y = p1.y + (p2.y - p0.y) / 6;
-    const cp2x = p2.x - (p3.x - p1.x) / 6;
-    const cp2y = p2.y - (p3.y - p1.y) / 6;
-
-    d += ` C ${cp1x.toFixed(2)} ${cp1y.toFixed(2)}, ${cp2x.toFixed(2)} ${cp2y.toFixed(2)}, ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
-  }
-  return d;
+  return points
+    .map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.x.toFixed(2)} ${point.y.toFixed(2)}`)
+    .join(' ');
 }
 
-const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label, accentColor, compact = false }) => {
+const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, isWaiting = false, label, accentColor, compact = false }) => {
   const instanceId = useId().replace(/:/g, '');
   const gradientId = `throughput-fill-${instanceId}`;
   const glowId = `throughput-glow-${instanceId}`;
@@ -68,6 +57,14 @@ const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label,
   }
 
   if (validSamples.length === 0) {
+    if (isWaiting) {
+      return (
+        <div className={`flex items-center justify-center font-mono text-[11px] text-app-muted ${compact ? 'h-8' : 'h-12'}`}>
+          <span className="mr-2 h-1.5 w-1.5 rounded-full bg-app-divider-strong" aria-hidden="true" />
+          Waiting
+        </div>
+      );
+    }
     return <div className={compact ? 'h-8' : 'h-12'} aria-hidden="true" />;
   }
 
@@ -93,7 +90,7 @@ const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label,
     y: height - 4 - (sample.mbps / peakMbps) * (height - 10),
   }));
 
-  const curvePath = generateSmoothPath(points);
+  const curvePath = generateLinePath(points);
   const firstPoint = points[0];
   const lastPoint = points[points.length - 1];
   const areaPath = `${curvePath} L ${lastPoint.x.toFixed(2)} ${height} L ${firstPoint.x.toFixed(2)} ${height} Z`;
@@ -156,7 +153,6 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       samples: downloadSamples,
       Icon: ArrowDownToLine,
       accentColor: '#06b6d4',
-      glowClass: 'glow-cyan',
     },
     {
       key: 'upload' as const,
@@ -165,25 +161,26 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       samples: uploadSamples,
       Icon: ArrowUpFromLine,
       accentColor: '#3b82f6',
-      glowClass: 'glow-blue',
     },
   ];
 
   return (
     <div className={`mx-auto grid w-full max-w-3xl grid-cols-2 gap-2 sm:gap-4 ${compact ? 'my-1' : 'my-4'}`}>
-      {cards.map(({ key, label, value, samples, Icon, accentColor, glowClass }) => {
+      {cards.map(({ key, label, value, samples, Icon, accentColor }) => {
         const isActive = activePhase === key;
+        const isWaiting = activePhase === 'idle'
+          || ((activePhase === 'download' || activePhase === 'upload') && !isActive && value === null);
         const hasValue = value !== null && Number.isFinite(value);
         return (
           <article
             key={key}
             className={`min-w-0 rounded-xl transition-all duration-300 glass-card glass-card-hover ${compact ? 'p-2.5 sm:p-3' : 'p-3.5 sm:p-4'} ${
               isActive
-                ? `bg-slate-900/90 ${glowClass}`
-                : 'border-white/10 bg-slate-900/60'
+                ? 'bg-app-raised shadow-md'
+                : 'border-app-divider bg-app-surface/60'
             }`}
             aria-label={`${label} throughput`}
-            style={{ borderColor: isActive ? `${accentColor}80` : undefined }}
+            style={{ borderColor: isActive ? `${accentColor}CC` : undefined }}
           >
             <div className="flex items-center">
               <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
@@ -207,7 +204,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
               <span className="font-mono text-xs font-medium text-slate-400">Mbps</span>
             </div>
 
-            <MiniSparkline samples={samples} isActive={isActive} label={label} accentColor={accentColor} compact={compact} />
+            <MiniSparkline samples={samples} isActive={isActive} isWaiting={isWaiting} label={label} accentColor={accentColor} compact={compact} />
           </article>
         );
       })}
