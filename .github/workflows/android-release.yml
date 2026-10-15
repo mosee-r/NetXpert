@@ -30,11 +30,14 @@ jobs:
       - name: Install web dependencies
         run: npm ci
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v4
-
       - name: Install Android SDK packages
-        run: sdkmanager "platforms;android-34" "build-tools;34.0.0"
+        run: |
+          if [ ! -x "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" ]; then
+            echo "Android SDK cmdline-tools not found at $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+            exit 1
+          fi
+          yes | "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager --licenses
+          "$ANDROID_HOME"/cmdline-tools/latest/bin/sdkmanager "platform-tools" "platforms;android-34" "build-tools;34.0.0"
 
       - name: Prepare release signing key
         env:
