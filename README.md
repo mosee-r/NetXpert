@@ -1,4 +1,9 @@
 # SpeedXpat
+- **Official repository:** [mosee-r/SpeedXpat](https://github.com/mosee-r/SpeedXpat)
+- **Development fork:** [phillipsezria-glitch/SpeedXpat](https://github.com/phillipsezria-glitch/SpeedXpat)
+- **Live app:** [speedxpat.vercel.app](https://speedxpat.vercel.app/)
+- **Latest release:** [Download the latest Android APK](https://github.com/mosee-r/SpeedXpat/releases/latest)
+
 
 SpeedXpat is a network diagnostics and capability assessment app for measuring internet quality, diagnosing connection issues, and evaluating how well a connection supports common online activities.
 
