@@ -4,6 +4,10 @@ SpeedXpat is a network diagnostics and capability assessment app for measuring i
 
 It combines a Vite + React frontend, a small Node/Express server, and a native Android WebView shell so the same experience can run in the browser and on mobile.
 
+- **Official repository:** [mosee-r/SpeedXpat](https://github.com/mosee-r/SpeedXpat)
+- **Live app:** [speedxpat.vercel.app](https://speedxpat.vercel.app/)
+- **Latest release:** [Download the latest Android APK](https://github.com/mosee-r/SpeedXpat/releases/latest)
+
 ## Features
 
 - Guided speed test for download and upload throughput
