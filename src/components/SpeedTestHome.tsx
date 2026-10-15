@@ -47,7 +47,7 @@ const PhaseHud: React.FC<{ stage: AssessmentStage }> = ({ stage }) => {
   const activeIndex = PHASE_STAGE_INDEX[stage] ?? -1;
 
   return (
-    <ol aria-label="Test phases" className="grid grid-cols-5 gap-2">
+    <ol aria-label="Test phases" className="grid grid-cols-5 gap-1 sm:gap-2">
       {TEST_PHASES.map((phase, index) => {
         const state = index < activeIndex
           ? 'done'
@@ -285,18 +285,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     warning: 'bg-amber-400 text-amber-300',
     poor: 'bg-rose-400 text-rose-300',
   };
-  const formatCountryName = (countryCode: string | undefined) => {
-    if (!countryCode) return 'Not available';
-    try {
-      return new Intl.DisplayNames(undefined, { type: 'region' }).of(countryCode) || countryCode;
-    } catch {
-      return countryCode;
-    }
-  };
-  const resultDate = report
-    ? new Intl.DateTimeFormat(undefined, { day: 'numeric', month: 'short', year: 'numeric' })
-        .format(new Date(report.timestamp))
-    : '';
   const ratingTextTone = report?.overallRating === 'excellent' || report?.overallRating === 'good'
     ? 'text-app-success'
     : report?.overallRating === 'fair'
@@ -309,7 +297,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     <div className={`speed-test-home mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 lg:px-6 ${!isTesting && !report ? 'speed-test-home-ready' : ''}`}>
       {!isTesting && !report ? (
         <section key="ready" className="test-state-enter grid flex-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] justify-items-center py-4" aria-label="Speed test ready">
-          <div className="flex w-full max-w-xl flex-col items-center justify-end px-4 pb-3 text-center">
+          <div className="flex w-full max-w-xl flex-col items-center justify-end px-4 pb-11 text-center">
             <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] ${connectionTone}`}>
               <span className={`h-2 w-2 rounded-full ${isOnline === null ? 'bg-app-muted' : isOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} aria-hidden="true" />
               <span>{connectionDetail}</span>
@@ -341,11 +329,11 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           <div className="flex w-full max-w-xl items-start justify-center px-4 pt-3 text-center" aria-hidden="true" />
         </section>
       ) : isTesting ? (
-        <section key="testing" className="test-state-enter grid flex-1 grid-cols-1 content-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)] lg:items-center lg:gap-8" aria-label="Speed test in progress">
+        <section key="testing" className="test-state-enter grid flex-1 grid-cols-1 content-center gap-2 sm:gap-4 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)] lg:items-center lg:gap-8" aria-label="Speed test in progress">
           <div className="min-w-0 lg:col-span-2">
             <PhaseHud stage={stage} />
           </div>
-          <div className="min-w-0 flex flex-col items-center gap-5 lg:flex lg:flex-col lg:items-center">
+          <div className="min-w-0 flex flex-col items-center gap-2 sm:gap-4 lg:flex lg:flex-col lg:items-center lg:gap-5">
             <ModernSpeedGauge
               value={currentSpeedMbps}
               phase={phase}
@@ -372,30 +360,33 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           </div>
 
           <div className="min-w-0 flex flex-col justify-center">
-            <TwinThroughputCards
-              downloadMbps={metrics.downloadMbps}
-              uploadMbps={metrics.uploadMbps}
-              downloadSamples={downloadSamples}
-              uploadSamples={uploadSamples}
-              activePhase={activePhase}
-            />
-
-            <div className="mx-auto grid w-full max-w-3xl grid-cols-3 divide-x divide-app-divider border-y border-app-divider py-3 text-center">
+            <div className="mx-auto mb-2 grid w-full max-w-3xl grid-cols-3 divide-x divide-app-divider border-y border-app-divider py-2 text-center sm:mb-4 sm:py-3">
               {[
                 ['Ping', metrics.idleLatencyMs === null ? '\u2014' : `${metrics.idleLatencyMs.toFixed(0)} ms`],
                 ['Loaded ping', metrics.loadedLatencyMs === null ? '\u2014' : `${metrics.loadedLatencyMs.toFixed(0)} ms`],
                 ['Jitter', metrics.jitterMs === null ? '\u2014' : `${metrics.jitterMs.toFixed(1)} ms`],
               ].map(([label, value]) => (
                 <div key={label} className="px-2">
-                  <span className="block text-[11px] text-app-muted">{label}</span>
-                  <span className="mt-1 block font-mono text-sm font-semibold tabular-nums text-app-primary">{value}</span>
+                  <span className="block text-[9px] text-app-muted sm:text-[11px]">{label}</span>
+                  <span className="mt-0.5 block font-mono text-xs font-semibold tabular-nums text-app-primary sm:mt-1 sm:text-sm">{value}</span>
                 </div>
               ))}
             </div>
 
+            <TwinThroughputCards
+              downloadMbps={metrics.downloadMbps}
+              uploadMbps={metrics.uploadMbps}
+              downloadSamples={downloadSamples}
+              uploadSamples={uploadSamples}
+              activePhase={activePhase}
+              compact
+            />
+
             <button
+              type="button"
               onClick={onCancelTest}
-              className="mx-auto mt-4 flex items-center gap-2 rounded-md px-3 py-2 text-sm text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary"
+              aria-label="Cancel speed test"
+              className="mx-auto mt-3 inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-400/25 bg-rose-500/[0.04] px-4 text-sm font-semibold text-rose-200/90 transition-all hover:border-rose-400/45 hover:bg-rose-500/10 hover:text-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 active:bg-rose-500/15"
             >
               <X className="h-4 w-4" aria-hidden="true" />
               <span>Cancel test</span>
@@ -405,14 +396,22 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
       ) : report ? (
         <section key="results" className="test-state-enter mx-auto flex w-full max-w-6xl flex-1 flex-col gap-3 pt-2 pb-24 sm:gap-5" aria-label="Speed test results">
           <div className="space-y-2 border-b border-app-divider pb-3 sm:space-y-3 sm:pb-5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <h2 className={`inline-flex items-center gap-2 text-xl font-semibold capitalize ${ratingTextTone}`}>
                 <RatingIcon className="h-5 w-5 shrink-0" aria-hidden="true" />
                 <span>{report.overallRating.replace(/_/g, ' ')} connection</span>
               </h2>
-              <time className="font-mono text-xs text-app-muted" dateTime={report.timestamp}>
-                {resultDate}
-              </time>
+              <button
+                type="button"
+                onClick={() => {
+                  if (canDiscardResult && !window.confirm('Discard this unsaved result and start a new test?')) return;
+                  onStartTest();
+                }}
+                className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-xl border border-cyan-200/30 bg-gradient-to-b from-cyan-300 to-cyan-500 px-4 text-sm font-bold text-slate-950 shadow-[0_8px_24px_-12px_rgba(34,211,238,0.75)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-12px_rgba(34,211,238,0.9)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:translate-y-0"
+              >
+                <RotateCcw className="h-4 w-4" aria-hidden="true" />
+                <span>Test again</span>
+              </button>
             </div>
             <p className="max-w-2xl text-xs leading-5 text-app-secondary">{resultSummary}</p>
           </div>
@@ -543,7 +542,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                   ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
                   : 'Not recorded',
               },
-              { label: 'Country', value: formatCountryName(report.networkInfo.locationCountry) },
               { label: 'City', value: report.networkInfo.locationCity || 'Not available' },
               ...(report.networkInfo.networkType !== 'unknown'
                 ? [{ label: 'Network', value: report.networkInfo.networkType }]
@@ -590,16 +588,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                 <span>Discard result</span>
               </button>
             )}
-            <button
-              onClick={() => {
-                if (canDiscardResult && !window.confirm('Discard this unsaved result and start a new test?')) return;
-                onStartTest();
-              }}
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[0.03] px-3.5 text-xs font-semibold text-app-primary transition-all hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-300/10 sm:px-4 sm:text-sm"
-            >
-              <RotateCcw className="h-4 w-4" aria-hidden="true" />
-              <span>Test again</span>
-            </button>
           </div>
 
           <div className="flex flex-wrap justify-center gap-2.5">

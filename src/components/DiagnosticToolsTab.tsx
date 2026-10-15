@@ -17,7 +17,7 @@ import {
 import { measureLatency } from '../engines/latencyEngine';
 import { measureDnsTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
-import { LatencySummary, LoadedLatencySummary } from '../types/network';
+import { DeviceNetworkInfo, LatencySummary, LoadedLatencySummary } from '../types/network';
 import { getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
 import { WifiChannelGraph, type WifiChannelNetwork } from './WifiChannelGraph';
 
@@ -101,7 +101,11 @@ function parseWifiScanResponse(value: string): WifiScanResponse | null {
   }
 }
 
-export const DiagnosticToolsTab: React.FC = () => {
+interface DiagnosticToolsTabProps {
+  networkInfo: DeviceNetworkInfo | null;
+}
+
+export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkInfo }) => {
   const defaultTestEndpoints = getDefaultTestEndpoints();
 
   // Tool 1: Continuous Ping & Jitter Monitor
@@ -177,6 +181,8 @@ export const DiagnosticToolsTab: React.FC = () => {
   const activeWifiNetwork = filteredWifiNetworks.find(
     (network) => wifiNetworkKey(network) === selectedWifiKey
   ) || filteredWifiNetworks[0];
+  const connectedWifiSsid =
+    networkInfo?.networkType === 'wifi' ? networkInfo.wifiSsid?.trim() : undefined;
   const activeWifiKey = activeWifiNetwork ? wifiNetworkKey(activeWifiNetwork) : null;
   const activeWifiHistory = activeWifiKey ? wifiSignalHistory[activeWifiKey] : undefined;
   const availableWifiBands = (['2.4 GHz', '5 GHz', '6 GHz'] as const).filter((band) =>
@@ -517,8 +523,8 @@ export const DiagnosticToolsTab: React.FC = () => {
             <div className="flex items-center space-x-2 text-cyan-400">
               <Wifi className="w-4 h-4" />
               <div>
-                <h3 className="text-sm font-bold text-white">Live Wi-Fi Analyzer</h3>
-              <p className="text-[10px] text-slate-500">Local Android RF scan data · identifiers stay on this device</p>
+                <h3 className="text-sm font-bold text-white">Available Wi-Fi</h3>
+              <p className="text-[10px] text-slate-500">Nearby access points · identifiers stay on this device</p>
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-2">
@@ -716,8 +722,15 @@ export const DiagnosticToolsTab: React.FC = () => {
                           <span className="min-w-0 break-words text-sm font-semibold text-slate-100">
                             {network.hidden ? 'Hidden network' : network.ssid}
                           </span>
-                          <span className="shrink-0 rounded bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-200">
-                            {network.security}
+                          <span className="flex shrink-0 items-center gap-1.5">
+                            {connectedWifiSsid && network.ssid === connectedWifiSsid && (
+                              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                Connected
+                              </span>
+                            )}
+                            <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-200">
+                              {network.security}
+                            </span>
                           </span>
                         </div>
                         <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[10px] text-slate-400">

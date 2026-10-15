@@ -159,7 +159,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [targetAngle, prefersReducedMotion]);
 
   return (
-    <div className="speed-gauge mx-auto my-2 select-none pt-10">
+    <div className={`speed-gauge mx-auto my-2 select-none pt-10 ${isRunning ? 'speed-gauge-running' : ''}`}>
       <div className="relative flex items-center justify-center">
         <div
           className={`gauge-halo pointer-events-none absolute inset-[12%] rounded-full blur-2xl ${isRunning ? 'gauge-halo-running' : ''}`}

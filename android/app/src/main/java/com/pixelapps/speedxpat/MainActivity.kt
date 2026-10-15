@@ -47,6 +47,14 @@ class MainActivity : AppCompatActivity() {
     private var wifiScanReceiverRegistered = false
     private var wifiPermissionRequestPending = false
 
+    private val requestWifiNameLocationPermission = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        if (granted && !SpeedXpatNativeInterface.isLocationEnabled(this)) {
+            openLocationSettings()
+        }
+    }
+
     private val requestWifiLocationPermissions = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { results ->
@@ -440,6 +448,19 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    fun requestWifiNameAccess() {
+        runOnUiThread {
+            val hasLocationPermission =
+                ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+            if (!hasLocationPermission) {
+                requestWifiNameLocationPermission.launch(Manifest.permission.ACCESS_FINE_LOCATION)
+            } else if (!SpeedXpatNativeInterface.isLocationEnabled(this)) {
+                openLocationSettings()
+            }
+        }
+    }
+
     fun openApplicationSettings() {
         runOnUiThread {
             startActivity(
@@ -483,6 +504,12 @@ class SpeedXpatNativeInterface(private val context: Context) {
     }
 
     @JavascriptInterface
+    fun hasWifiNamePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED ||
+            ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
+    }
+
+    @JavascriptInterface
     fun isLocationEnabled(): Boolean {
         val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager
             ?: return false
@@ -495,6 +522,11 @@ class SpeedXpatNativeInterface(private val context: Context) {
                 Settings.Secure.LOCATION_MODE_OFF
             ) != Settings.Secure.LOCATION_MODE_OFF
         }
+    }
+
+    @JavascriptInterface
+    fun requestWifiNameAccess() {
+        (context as? MainActivity)?.requestWifiNameAccess()
     }
 
     @JavascriptInterface

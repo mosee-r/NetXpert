@@ -8,7 +8,9 @@ export interface AndroidNativeBridge {
   getWifiSsid(): string;
   getNetworkType(): string;
   hasValidatedInternet?(): boolean;
+  hasWifiNamePermission(): boolean;
   isLocationEnabled(): boolean;
+  requestWifiNameAccess(): void;
   openLocationSettings(): void;
   openApplicationSettings(): void;
   scanWifiNetworks(): boolean;

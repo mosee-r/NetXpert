@@ -12,6 +12,7 @@ import {
   getAndroidNativeBridge,
   isAndroidNativeApp,
 } from './testEndpoints';
+import { locateNearestMlabServer } from '../services/mlabService';
 
 interface NetworkInformationNavigator extends Navigator {
   connection?: {
@@ -222,6 +223,10 @@ export async function detectNetworkInfo(
     } catch {
       // fallback
     }
+  }
+
+  if (online && !nearestServer) {
+    nearestServer = await locateNearestMlabServer() || undefined;
   }
 
   // 4. Fallback for IP if third-party providers failed

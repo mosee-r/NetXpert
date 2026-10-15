@@ -300,6 +300,16 @@
   .speed-gauge {
     width: min(78vw, 34dvh, 380px);
   }
+  @media (max-height: 760px) {
+    .speed-gauge-running {
+      width: min(72vw, 27dvh, 320px);
+      margin-block: 0;
+      padding-top: 1.25rem;
+    }
+    .speed-test-home:not(.speed-test-home-ready) {
+      padding-bottom: calc(64px + env(safe-area-inset-bottom));
+    }
+  }
   .start-cta {
     width: min(clamp(12rem, 56vw, 15.5rem), 36dvh);
     aspect-ratio: 1;
