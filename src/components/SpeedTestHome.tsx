@@ -92,6 +92,7 @@ const PhaseHud: React.FC<{ stage: AssessmentStage }> = ({ stage }) => {
 
 interface SpeedTestHomeProps {
   networkInfo: DeviceNetworkInfo | null;
+  isOnline: boolean | null;
   report: OverallAssessmentReport | null;
   lastReport: OverallAssessmentReport | null;
   canDiscardResult: boolean;
@@ -120,6 +121,7 @@ interface SpeedTestHomeProps {
 
 export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   networkInfo,
+  isOnline,
   report,
   lastReport,
   canDiscardResult,
@@ -227,14 +229,26 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
         return `Last test · ${download === null ? '--' : `${download.toFixed(1)} Mbps`} down / ${upload === null ? '--' : `${upload.toFixed(1)} Mbps`} up · ${age}`;
       })()
     : null;
-  const networkContext = [networkInfo?.ispName, networkInfo?.locationCity]
-    .filter((value): value is string => Boolean(value))
-    .join(' · ');
-  const connectionStatus = networkInfo?.online === undefined
-    ? ''
-    : networkInfo.online
-    ? ''
-    : 'Offline · reconnect to test';
+  const transportLabel = networkInfo?.networkType === 'wifi'
+    ? 'Wi-Fi'
+    : networkInfo?.networkType === 'cellular'
+    ? 'Mobile data'
+    : networkInfo?.networkType === 'ethernet'
+    ? 'Ethernet'
+    : '';
+  const connectionStatus = isOnline === null
+    ? 'Checking internet access'
+    : isOnline
+    ? 'Internet available'
+    : 'No internet access';
+  const connectionDetail = transportLabel
+    ? `${transportLabel} · ${connectionStatus}`
+    : connectionStatus;
+  const connectionTone = isOnline === null
+    ? 'border-white/10 bg-white/5 text-app-secondary'
+    : isOnline
+    ? 'border-emerald-400/20 bg-emerald-400/[0.05] text-emerald-200'
+    : 'border-rose-400/25 bg-rose-500/[0.05] text-rose-200';
   const ratingTone = report?.overallRating === 'excellent' || report?.overallRating === 'good'
     ? 'border-app-success/25 bg-app-success-soft text-app-success'
     : report?.overallRating === 'fair'
@@ -296,16 +310,10 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
       {!isTesting && !report ? (
         <section key="ready" className="test-state-enter grid flex-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] justify-items-center py-4" aria-label="Speed test ready">
           <div className="flex w-full max-w-xl flex-col items-center justify-end px-4 pb-3 text-center">
-            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-md">
-              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]" aria-hidden="true" />
-              <span className="text-[10px] font-medium uppercase tracking-[0.30em] text-app-secondary">Ready</span>
+            <div role="status" aria-live="polite" className={`inline-flex items-center gap-2 rounded-full border px-3.5 py-1.5 text-[10px] font-medium uppercase tracking-[0.2em] ${connectionTone}`}>
+              <span className={`h-2 w-2 rounded-full ${isOnline === null ? 'bg-app-muted' : isOnline ? 'bg-emerald-400' : 'bg-rose-400'}`} aria-hidden="true" />
+              <span>{connectionDetail}</span>
             </div>
-
-            {connectionStatus && (
-              <div className="mt-3 rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 shadow-[0_18px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur-sm">
-                <p className="text-[11px] font-medium uppercase tracking-[0.34em] text-app-secondary">{connectionStatus}</p>
-              </div>
-            )}
             {lastTestSummary && (
               <p className="mt-3 max-w-md text-sm text-app-muted">{lastTestSummary}</p>
             )}
@@ -330,11 +338,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </button>
           </div>
 
-          <div className="flex w-full max-w-xl items-start justify-center px-4 pt-3 text-center">
-            {networkContext && (
-              <p className="max-w-lg text-sm text-app-secondary">{networkContext}</p>
-            )}
-          </div>
+          <div className="flex w-full max-w-xl items-start justify-center px-4 pt-3 text-center" aria-hidden="true" />
         </section>
       ) : isTesting ? (
         <section key="testing" className="test-state-enter grid flex-1 grid-cols-1 content-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)] lg:items-center lg:gap-8" aria-label="Speed test in progress">

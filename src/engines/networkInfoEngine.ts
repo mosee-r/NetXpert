@@ -25,7 +25,39 @@ interface NetworkInformationNavigator extends Navigator {
   };
 }
 
-export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
+export async function detectInternetAccess(): Promise<boolean> {
+  const androidNative = getAndroidNativeBridge();
+  if (androidNative?.hasValidatedInternet) {
+    try {
+      return androidNative.hasValidatedInternet();
+    } catch {
+      return false;
+    }
+  }
+
+  if (!navigator.onLine) return false;
+  if (isAndroidNativeApp()) return navigator.onLine;
+
+  const requestTimeout = createRequestTimeout(undefined, 2_500);
+  try {
+    const response = await fetch('/api/ping', {
+      cache: 'no-store',
+      signal: requestTimeout.signal,
+    });
+    return response.ok;
+  } catch {
+    return false;
+  } finally {
+    requestTimeout.dispose();
+  }
+}
+
+export async function detectNetworkInfo(
+  onInternetAccessDetected?: (isOnline: boolean) => void
+): Promise<DeviceNetworkInfo> {
+  const online = await detectInternetAccess();
+  onInternetAccessDetected?.(online);
+
   const nav = navigator as NetworkInformationNavigator;
   const conn = nav.connection;
 
@@ -220,7 +252,7 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
     downlinkMbps,
     rttMs,
     saveData,
-    online: navigator.onLine,
+    online,
     ipAddress,
     ispName,
     asn,

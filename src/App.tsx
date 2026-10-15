@@ -104,7 +104,7 @@ export default function App() {
   const [stageName, setStageName] = useState('');
   const [progressPercent, setProgressPercent] = useState(0);
   const [appError, setAppError] = useState<string | null>(null);
-  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [isOnline, setIsOnline] = useState<boolean | null>(null);
 
   // Hero Gauge Counter State
   const [heroValue, setHeroValue] = useState(
@@ -155,15 +155,21 @@ export default function App() {
   // Initial network info detection & listeners
   useEffect(() => {
     let mounted = true;
-    detectNetworkInfo().then((info) => {
-      if (mounted) setNetworkInfo(info);
-    });
+    const refreshNetworkInfo = () => {
+      void detectNetworkInfo((online) => {
+        if (mounted) setIsOnline(online);
+      }).then((info) => {
+        if (mounted) {
+          setNetworkInfo(info);
+          setIsOnline(info.online);
+        }
+      });
+    };
+
+    refreshNetworkInfo();
 
     const handleNetworkChange = () => {
-      setIsOnline(navigator.onLine);
-      detectNetworkInfo().then((info) => {
-        if (mounted) setNetworkInfo(info);
-      });
+      refreshNetworkInfo();
     };
 
     const handleNativeNetworkRefresh = () => handleNetworkChange();
@@ -334,7 +340,7 @@ export default function App() {
         setTestStage('failed');
         setHeroLabel('TEST FAILED');
         setAppError(
-          navigator.onLine
+          isOnline !== false
             ? 'The assessment could not finish. Check your connection and test targets, then try again.'
             : 'The assessment stopped because your device is offline. Reconnect and try again.'
         );
@@ -427,7 +433,7 @@ export default function App() {
 
       {/* 1. Top App Bar */}
       <Header
-        networkInfo={networkInfo}
+        isOnline={isOnline}
         activeTab={activeTab}
         isTesting={isTesting}
         showSpeedResults={
@@ -445,13 +451,13 @@ export default function App() {
 
       {/* 2. Main Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-4">
-        {!isOnline && (
+        {isOnline === false && (
           <div
             role="status"
             aria-live="polite"
             className="mb-4 rounded-xl border border-amber-500/30 bg-amber-950/40 px-4 py-3 text-sm text-amber-200"
           >
-            Your device reports no network connection. Saved reports remain available; diagnostics need a connection.
+            Your device cannot reach the internet. Saved reports remain available; diagnostics need a connection.
           </div>
         )}
         {appError && (
@@ -474,6 +480,7 @@ export default function App() {
         {activeTab === 'speed' && (
           <SpeedTestHome
             networkInfo={networkInfo}
+            isOnline={isOnline}
             report={showResults ? pendingReport ?? currentReport : null}
             lastReport={currentReport}
             canDiscardResult={pendingReport !== null}
@@ -500,8 +507,9 @@ export default function App() {
             networkInfo={networkInfo}
             history={history}
             onRefreshNetworkInfo={async () => {
-              const info = await detectNetworkInfo();
+              const info = await detectNetworkInfo(setIsOnline);
               setNetworkInfo(info);
+              setIsOnline(info.online);
             }}
           />
         )}

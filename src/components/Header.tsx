@@ -7,12 +7,11 @@ import {
   Trash2,
   RotateCcw,
 } from 'lucide-react';
-import { DeviceNetworkInfo } from '../types/network';
 
 type HeaderTab = 'speed' | 'network' | 'tools' | 'trends';
 
 interface HeaderProps {
-  networkInfo: DeviceNetworkInfo | null;
+  isOnline: boolean | null;
   activeTab: HeaderTab;
   isTesting: boolean;
   showSpeedResults: boolean;
@@ -25,7 +24,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  networkInfo,
+  isOnline,
   activeTab,
   isTesting,
   showSpeedResults,
@@ -36,7 +35,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenHistory,
   savedCount,
 }) => {
-  const isOnline = networkInfo?.online ?? true;
+  const connectivityLabel = isOnline === null
+    ? 'Checking internet access'
+    : isOnline
+    ? 'Internet available'
+    : 'No internet access';
   const title = activeTab === 'speed'
     ? showSpeedResults ? 'Result' : 'SpeedXpat'
     : activeTab === 'network'
@@ -77,10 +80,11 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center space-x-2">
               <span className="text-lg font-extrabold tracking-tight text-app-primary">SpeedXpat</span>
               <span
-                className={`w-2.5 h-2.5 rounded-full ${
-                  isOnline ? 'bg-app-success' : 'bg-app-danger'
+                className={`h-2.5 w-2.5 rounded-full ${
+                  isOnline === null ? 'bg-app-muted' : isOnline ? 'bg-app-success' : 'bg-app-danger'
                 }`}
-                title={isOnline ? 'Internet Verified' : 'Connection Disconnected'}
+                title={connectivityLabel}
+                aria-label={connectivityLabel}
               />
             </div>
             <p className="text-[10px] text-slate-400 font-mono -mt-0.5">

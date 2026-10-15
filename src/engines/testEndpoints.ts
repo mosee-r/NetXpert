@@ -7,6 +7,7 @@ export interface TestEndpoints {
 export interface AndroidNativeBridge {
   getWifiSsid(): string;
   getNetworkType(): string;
+  hasValidatedInternet?(): boolean;
   isLocationEnabled(): boolean;
   openLocationSettings(): void;
   openApplicationSettings(): void;
