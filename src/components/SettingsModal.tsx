@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useId, useRef } from 'react';
 import {
   X,
   Settings,
@@ -23,6 +23,12 @@ interface SettingsModalProps {
   setMaxDownloadMb: (val: number) => void;
   maxUploadMb: number;
   setMaxUploadMb: (val: number) => void;
+  benchmarkMode: boolean;
+  setBenchmarkMode: (val: boolean) => void;
+  useDownloadCap: boolean;
+  setUseDownloadCap: (val: boolean) => void;
+  useUploadCap: boolean;
+  setUseUploadCap: (val: boolean) => void;
   concurrencyCount: number;
   setConcurrencyCount: (val: number) => void;
   dataSaverMode: boolean;
@@ -42,6 +48,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setMaxDownloadMb,
   maxUploadMb,
   setMaxUploadMb,
+  benchmarkMode,
+  setBenchmarkMode,
+  useDownloadCap,
+  setUseDownloadCap,
+  useUploadCap,
+  setUseUploadCap,
   concurrencyCount,
   setConcurrencyCount,
   dataSaverMode,
@@ -49,6 +61,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   useMlab,
   setUseMlab,
 }) => {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const previousFocus = document.activeElement instanceof HTMLElement
+      ? document.activeElement
+      : null;
+    const dialog = dialogRef.current;
+    const focusableSelector = 'button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+    const focusable = () => Array.from(dialog?.querySelectorAll<HTMLElement>(focusableSelector) ?? []);
+    focusable()[0]?.focus();
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        onClose();
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        const items = focusable();
+        if (items.length === 0) return;
+        if (event.shiftKey && document.activeElement === items[0]) {
+          event.preventDefault();
+          items[items.length - 1].focus();
+        } else if (!event.shiftKey && document.activeElement === items[items.length - 1]) {
+          event.preventDefault();
+          items[0].focus();
+        }
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocus?.focus();
+    };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleReset = () => {
@@ -57,13 +110,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     setDnsDomain('cloudflare.com');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);
+    setBenchmarkMode(true);
+    setUseDownloadCap(false);
+    setUseUploadCap(false);
     setConcurrencyCount(4);
     setDataSaverMode(false);
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 animate-in fade-in duration-200">
-      <div className="bg-[#0E1A2E] border border-white/10 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 text-white relative scrollbar-none">
+      <div
+        ref={dialogRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className="bg-[#0E1A2E] border border-white/10 rounded-3xl max-w-lg w-full max-h-[90vh] overflow-y-auto p-6 text-white relative scrollbar-none"
+      >
         {/* Header */}
         <div className="flex items-center justify-between pb-3 border-b border-white/10">
           <div className="flex items-center space-x-2.5">
@@ -71,12 +134,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <Settings className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-base font-bold text-white">Diagnostics & Test Settings</h2>
+              <h2 id={titleId} className="text-base font-bold text-white">Diagnostics & Test Settings</h2>
               <span className="text-[11px] text-slate-400 font-mono">SpeedXpat v1.0 • Engine {SCORING_RULE_VERSION}</span>
             </div>
           </div>
           <button
             onClick={onClose}
+            aria-label="Close diagnostics and test settings"
             className="p-1.5 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
           >
             <X className="w-5 h-5" />
@@ -192,29 +256,104 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </div>
 
           {/* Data Cap Bounds */}
-          <div className="grid grid-cols-2 gap-3 text-xs">
-            <div>
-              <label className="text-slate-300 block mb-1">Max Download Cap (MB):</label>
-              <input
-                type="number"
-                min={2}
-                max={40}
-                value={maxDownloadMb}
-                onChange={(e) => setMaxDownloadMb(Number(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 font-mono text-slate-200"
-              />
+          <div className="space-y-3 text-xs">
+            <div className="flex items-center justify-between rounded-xl border border-white/5 bg-[#15253D] p-3">
+              <div>
+                <span className="font-semibold text-slate-200 block">Benchmark mode</span>
+                <span className="text-[11px] text-slate-400">Remove caps and use a full-speed comparison window</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setBenchmarkMode(!benchmarkMode)}
+                role="switch"
+                aria-checked={benchmarkMode}
+                className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
+                  benchmarkMode ? 'bg-cyan-500' : 'bg-slate-700'
+                }`}
+              >
+                <div
+                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                    benchmarkMode ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
             </div>
-            <div>
-              <label className="text-slate-300 block mb-1">Max Upload Cap (MB):</label>
-              <input
-                type="number"
-                min={1}
-                max={25}
-                value={maxUploadMb}
-                onChange={(e) => setMaxUploadMb(Number(e.target.value))}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 font-mono text-slate-200"
-              />
-            </div>
+
+            {!benchmarkMode && (
+              <>
+                <div className="flex items-center justify-between rounded-xl border border-white/5 bg-[#15253D] p-3">
+                  <div>
+                    <span className="font-semibold text-slate-200 block">Use download cap</span>
+                    <span className="text-[11px] text-slate-400">Limit the test to a fixed download size</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseDownloadCap(!useDownloadCap)}
+                    role="switch"
+                    aria-checked={useDownloadCap}
+                    className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
+                      useDownloadCap ? 'bg-cyan-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                        useDownloadCap ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-slate-300 block mb-1">Max Download Cap (MB):</label>
+                    <input
+                      type="number"
+                      min={2}
+                      max={40}
+                      value={maxDownloadMb}
+                      onChange={(e) => setMaxDownloadMb(Number(e.target.value))}
+                      disabled={!useDownloadCap}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 font-mono text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-slate-300 block mb-1">Max Upload Cap (MB):</label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={25}
+                      value={maxUploadMb}
+                      onChange={(e) => setMaxUploadMb(Number(e.target.value))}
+                      disabled={!useUploadCap}
+                      className="w-full bg-slate-900 border border-slate-700 rounded-lg p-2 font-mono text-slate-200 disabled:opacity-40 disabled:cursor-not-allowed"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between rounded-xl border border-white/5 bg-[#15253D] p-3">
+                  <div>
+                    <span className="font-semibold text-slate-200 block">Use upload cap</span>
+                    <span className="text-[11px] text-slate-400">Limit the test to a fixed upload size</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setUseUploadCap(!useUploadCap)}
+                    role="switch"
+                    aria-checked={useUploadCap}
+                    className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
+                      useUploadCap ? 'bg-cyan-500' : 'bg-slate-700'
+                    }`}
+                  >
+                    <div
+                      className={`w-5 h-5 rounded-full bg-white transition-transform ${
+                        useUploadCap ? 'translate-x-5' : 'translate-x-0'
+                      }`}
+                    />
+                  </button>
+                </div>
+              </>
+            )}
           </div>
 
           {/* Privacy & Zero-Telemetry Guarantee */}

@@ -94,6 +94,73 @@ app.get('/api/dns/lookup', async (req, res) => {
   }
 });
 
+app.get('/api/network/identity', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 8_000);
+
+  try {
+    const [ipMetaRes, serverRes] = await Promise.all([
+      fetch('https://ipapi.co/json/', {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      }).catch(() => null),
+      fetch('https://locate.measurementlab.net/v2/nearest/ndt/ndt7', {
+        headers: { Accept: 'application/json' },
+        signal: controller.signal,
+      }).catch(() => null),
+    ]);
+
+    let ipMeta: Record<string, any> | null = null;
+    if (ipMetaRes && ipMetaRes.ok) {
+      ipMeta = await ipMetaRes.json();
+    }
+
+    let nearestServer: Record<string, any> | null = null;
+    if (serverRes && serverRes.ok) {
+      const data = await serverRes.json();
+      nearestServer = data?.results?.[0] ?? null;
+    }
+
+    const orgStr = String(ipMeta?.org || ipMeta?.asn_org || '');
+    const asn = String(ipMeta?.asn || '');
+    const orgValue = ipMeta?.org ? String(ipMeta.org) : '';
+    const isp = orgValue.startsWith(asn) ? orgValue.replace(new RegExp(`^${asn}\\s*`, 'i'), '').trim() : orgValue;
+    const fallbackIsp = orgStr.startsWith('AS') ? orgStr.split(' ').slice(1).join(' ') : orgStr;
+
+    return res.json({
+      ok: true,
+      ip: ipMeta?.ip || null,
+      isp: (isp || fallbackIsp || 'Unknown provider').trim() || 'Unknown provider',
+      asn: asn || null,
+      org: orgStr || null,
+      city: ipMeta?.city || nearestServer?.location?.city || null,
+      region: ipMeta?.region || null,
+      country: ipMeta?.country || nearestServer?.location?.country || null,
+      nearestServer: nearestServer
+        ? {
+            machine: nearestServer.machine || null,
+            hostname: nearestServer.hostname || null,
+            city: nearestServer.location?.city || null,
+            country: nearestServer.location?.country || null,
+            label: nearestServer.location
+              ? `M-Lab ${nearestServer.location.city || 'Edge'}, ${nearestServer.location.country || ''}`
+              : nearestServer.hostname || 'M-Lab nearest server',
+          }
+        : null,
+      source: 'ipapi.co + measurementlab.net',
+    });
+  } catch {
+    // fallback is handled below
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  return res.status(502).json({ ok: false, error: 'Network identity lookup is temporarily unavailable.' });
+});
+
 app.get('/api/network/isp', async (_req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
 

@@ -19,6 +19,7 @@ import { shareOrDownloadSnapshot } from '../services/shareImageGenerator';
 
 interface TrendsTabProps {
   history: OverallAssessmentReport[];
+  hasPendingResult?: boolean;
   onDeleteReport: (id: string) => void;
   onClearAllHistory: () => void;
   onInspectReport: (report: OverallAssessmentReport) => void;
@@ -27,6 +28,7 @@ interface TrendsTabProps {
 
 export const TrendsTab: React.FC<TrendsTabProps> = ({
   history,
+  hasPendingResult = false,
   onDeleteReport,
   onClearAllHistory,
   onInspectReport,
@@ -78,6 +80,12 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
 
   return (
     <div className="max-w-4xl mx-auto space-y-5 pb-20">
+      {hasPendingResult && (
+        <p role="status" className="rounded-lg border border-app-accent/25 bg-app-accent/10 px-3 py-2 text-xs leading-5 text-app-secondary">
+          A test result is waiting on Speed Test. Choose Save and close there to add it to your history.
+        </p>
+      )}
+
       {/* Title & Global Export Buttons */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center space-x-2.5">

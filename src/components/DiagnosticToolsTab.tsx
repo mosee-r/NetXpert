@@ -108,7 +108,7 @@ export const DiagnosticToolsTab: React.FC = () => {
   const [isMonitoringPing, setIsMonitoringPing] = useState(false);
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
   const [rollingPingSamples, setRollingPingSamples] = useState<number[]>([]);
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const pingControllerRef = useRef<AbortController | null>(null);
 
   // Standalone HTTP probe completion-rate test
   const [dropProbeTarget, setDropProbeTarget] = useState(defaultTestEndpoints.ping);
@@ -364,30 +364,36 @@ export const DiagnosticToolsTab: React.FC = () => {
 
   // Continuous Ping Loop
   useEffect(() => {
-    if (isMonitoringPing) {
-      pingIntervalRef.current = setInterval(async () => {
-        const start = performance.now();
-        try {
-          const separator = pingTarget.includes('?') ? '&' : '?';
-          const probeUrl = `${pingTarget}${separator}_t=${Date.now()}`;
-          const res = await fetch(probeUrl, {
-            method: 'HEAD',
-            cache: 'no-store',
-          }).catch(async () => {
-            return await fetch(probeUrl, { cache: 'no-store' });
-          });
-          const elapsed = Math.round(performance.now() - start);
-          setRollingPingSamples((prev) => [...prev.slice(-24), elapsed]);
-        } catch {
-          setRollingPingSamples((prev) => [...prev.slice(-24), 999]); // drop marker
-        }
-      }, 700);
-    } else {
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
-    }
+    if (!isMonitoringPing) return;
+
+    let isCancelled = false;
+    let nextProbeTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const runProbe = async () => {
+      const controller = new AbortController();
+      pingControllerRef.current = controller;
+
+      const result = await measureLatency({
+        targetUrl: pingTarget,
+        sampleCount: 1,
+        timeoutMs: 1500,
+        signal: controller.signal,
+      });
+
+      if (isCancelled || controller.signal.aborted) return;
+
+      const latencyMs = result.samples[0]?.latencyMs;
+      setRollingPingSamples((previous) => [...previous.slice(-24), latencyMs ?? 999]);
+      nextProbeTimeout = setTimeout(() => void runProbe(), 700);
+    };
+
+    void runProbe();
 
     return () => {
-      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+      isCancelled = true;
+      if (nextProbeTimeout) clearTimeout(nextProbeTimeout);
+      pingControllerRef.current?.abort();
+      pingControllerRef.current = null;
     };
   }, [isMonitoringPing, pingTarget]);
 

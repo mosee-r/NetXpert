@@ -168,7 +168,7 @@ export class AssessmentOrchestrator {
       const downloadResult = await measureThroughput({
         targetUrl: downloadTarget,
         direction: 'download',
-        maxBytes: options.maxDownloadBytes || 8 * 1024 * 1024,
+        maxBytes: options.maxDownloadBytes,
         durationTargetMs: 3500,
         signal,
         onProgress: (bytes, mbps, elapsedMs, sample) => {
@@ -199,7 +199,7 @@ export class AssessmentOrchestrator {
       const uploadResult = await measureThroughput({
         targetUrl: uploadTarget,
         direction: 'upload',
-        maxBytes: options.maxUploadBytes || 4 * 1024 * 1024,
+        maxBytes: options.maxUploadBytes,
         durationTargetMs: 3000,
         signal,
         onProgress: (bytes, mbps, elapsedMs, sample) => {

@@ -12,6 +12,7 @@ interface TwinThroughputCardsProps {
   downloadSamples: ThroughputCardSample[];
   uploadSamples: ThroughputCardSample[];
   activePhase: 'idle' | 'download' | 'upload' | 'completed';
+  compact?: boolean;
 }
 
 interface MiniSparklineProps {
@@ -19,6 +20,7 @@ interface MiniSparklineProps {
   isActive: boolean;
   label: string;
   accentColor: string;
+  compact?: boolean;
 }
 
 function generateSmoothPath(points: { x: number; y: number }[]): string {
@@ -40,12 +42,12 @@ function generateSmoothPath(points: { x: number; y: number }[]): string {
   return d;
 }
 
-const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label, accentColor }) => {
+const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label, accentColor, compact = false }) => {
   const instanceId = useId().replace(/:/g, '');
   const gradientId = `throughput-fill-${instanceId}`;
   const glowId = `throughput-glow-${instanceId}`;
   const width = 240;
-  const height = 48;
+  const height = compact ? 32 : 48;
 
   const validSamples = samples
     .filter((sample) =>
@@ -56,17 +58,29 @@ const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label,
     )
     .sort((left, right) => left.timestampMs - right.timestampMs);
 
-  if (validSamples.length < 2) {
-    const message = isActive
-      ? 'Collecting live data...'
-      : validSamples.length > 0
-      ? `Collecting (${validSamples.length}/2)`
-      : 'Ready';
+  if (validSamples.length < 2 && isActive) {
     return (
-      <div className="flex h-12 items-center justify-center rounded-lg border border-white/5 bg-slate-950/40 font-mono text-[11px] text-slate-400">
-        {isActive && <span className="mr-2 h-2 w-2 animate-ping rounded-full" style={{ backgroundColor: accentColor }} />}
-        {message}
+      <div className={`flex items-center justify-center rounded-lg border border-white/5 bg-slate-950/40 font-mono text-[11px] text-slate-400 ${compact ? 'h-8' : 'h-12'}`}>
+        <span className="mr-2 h-2 w-2 animate-ping rounded-full" style={{ backgroundColor: accentColor }} />
+        Collecting live data...
       </div>
+    );
+  }
+
+  if (validSamples.length === 0) {
+    return <div className={compact ? 'h-8' : 'h-12'} aria-hidden="true" />;
+  }
+
+  if (validSamples.length === 1) {
+    return (
+      <svg
+        viewBox={`0 0 ${width} ${height}`}
+        className={`block w-full overflow-hidden ${compact ? 'h-8' : 'h-12'}`}
+        role="img"
+        aria-label={`${label} throughput: one sample at ${validSamples[0].mbps.toFixed(2)} Mbps`}
+      >
+        <circle cx={width / 2} cy={height / 2} r="3.5" fill={accentColor} />
+      </svg>
     );
   }
 
@@ -87,7 +101,7 @@ const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, label,
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="block h-12 w-full overflow-hidden"
+      className={`block w-full overflow-hidden ${compact ? 'h-8' : 'h-12'}`}
       preserveAspectRatio="none"
       role="img"
       aria-label={`${label} throughput samples`}
@@ -132,6 +146,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
   downloadSamples,
   uploadSamples,
   activePhase,
+  compact = false,
 }) => {
   const cards = [
     {
@@ -155,14 +170,14 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
   ];
 
   return (
-    <div className="mx-auto my-4 grid w-full max-w-3xl grid-cols-2 gap-3 sm:gap-4">
+    <div className={`mx-auto grid w-full max-w-3xl grid-cols-2 gap-2 sm:gap-4 ${compact ? 'my-1' : 'my-4'}`}>
       {cards.map(({ key, label, value, samples, Icon, accentColor, glowClass }) => {
         const isActive = activePhase === key;
         const hasValue = value !== null && Number.isFinite(value);
         return (
           <article
             key={key}
-            className={`min-w-0 rounded-xl p-3.5 sm:p-4 transition-all duration-300 glass-card glass-card-hover ${
+            className={`min-w-0 rounded-xl transition-all duration-300 glass-card glass-card-hover ${compact ? 'p-2.5 sm:p-3' : 'p-3.5 sm:p-4'} ${
               isActive
                 ? `bg-slate-900/90 ${glowClass}`
                 : 'border-white/10 bg-slate-900/60'
@@ -182,9 +197,9 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
               </div>
             </div>
 
-            <div className="mt-3 mb-1 flex items-baseline gap-1.5">
+            <div className={`${compact ? 'mt-1.5' : 'mt-3'} mb-1 flex items-baseline gap-1.5`}>
               <span
-                className="font-mono text-3xl font-extrabold tabular-nums tracking-tight text-white"
+                className={`font-mono font-extrabold tabular-nums tracking-tight text-white ${compact ? 'text-2xl' : 'text-3xl'}`}
                 style={{ textShadow: hasValue ? `0 0 16px ${accentColor}40` : 'none' }}
               >
                 {hasValue ? value.toFixed(1) : '\u2014'}
@@ -192,7 +207,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
               <span className="font-mono text-xs font-medium text-slate-400">Mbps</span>
             </div>
 
-            <MiniSparkline samples={samples} isActive={isActive} label={label} accentColor={accentColor} />
+            <MiniSparkline samples={samples} isActive={isActive} label={label} accentColor={accentColor} compact={compact} />
           </article>
         );
       })}

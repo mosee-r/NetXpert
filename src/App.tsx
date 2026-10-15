@@ -25,8 +25,6 @@ import {
 import { triggerHaptic } from './utils/haptics';
 import { getDefaultTestEndpoints, isAndroidNativeApp } from './engines/testEndpoints';
 
-const ADVANCED_MODE_KEY = 'speedxpat_advanced_mode';
-const LEGACY_ADVANCED_MODE_KEY = 'netxpert_advanced_mode';
 const defaultTestEndpoints = getDefaultTestEndpoints();
 
 function validateTestSettings(
@@ -65,19 +63,6 @@ function validateTestSettings(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTabType>('speed');
-  const [advancedMode, setAdvancedMode] = useState<boolean>(() => {
-    const storedValue = localStorage.getItem(ADVANCED_MODE_KEY);
-    if (storedValue !== null) return storedValue === 'true';
-
-    const legacyValue = localStorage.getItem(LEGACY_ADVANCED_MODE_KEY);
-    if (legacyValue !== null) {
-      localStorage.setItem(ADVANCED_MODE_KEY, legacyValue);
-      return legacyValue === 'true';
-    }
-
-    return false;
-  });
-
   const [networkInfo, setNetworkInfo] = useState<DeviceNetworkInfo | null>(null);
   const [history, setHistory] = useState<OverallAssessmentReport[]>(() =>
     getAssessmentHistory()
@@ -96,6 +81,9 @@ export default function App() {
   const [dnsDomain, setDnsDomain] = useState('cloudflare.com');
   const [maxDownloadMb, setMaxDownloadMb] = useState(8);
   const [maxUploadMb, setMaxUploadMb] = useState(4);
+  const [benchmarkMode, setBenchmarkMode] = useState(true);
+  const [useDownloadCap, setUseDownloadCap] = useState(!benchmarkMode);
+  const [useUploadCap, setUseUploadCap] = useState(!benchmarkMode);
   const [concurrencyCount, setConcurrencyCount] = useState(4);
   const [dataSaverMode, setDataSaverMode] = useState(false);
   const [useMlab, setUseMlab] = useState(true);
@@ -134,7 +122,8 @@ export default function App() {
   );
 
   // Real-time Sparkline & Matrix updates
-  const [sparklineData, setSparklineData] = useState<ThroughputChartPoint[]>([]);
+  const [downloadSparklineData, setDownloadSparklineData] = useState<ThroughputChartPoint[]>([]);
+  const [uploadSparklineData, setUploadSparklineData] = useState<ThroughputChartPoint[]>([]);
   const [activeMetrics, setActiveMetrics] = useState<{
     downloadMbps?: number | null;
     uploadMbps?: number | null;
@@ -198,13 +187,15 @@ export default function App() {
     }
   };
 
-  const handleToggleAdvancedMode = () => {
-    setAdvancedMode((prev) => {
-      const next = !prev;
-      localStorage.setItem(ADVANCED_MODE_KEY, String(next));
-      return next;
-    });
-  };
+  useEffect(() => {
+    if (benchmarkMode) {
+      setUseDownloadCap(false);
+      setUseUploadCap(false);
+    } else {
+      setUseDownloadCap(true);
+      setUseUploadCap(true);
+    }
+  }, [benchmarkMode]);
 
   // Start Guided Assessment
   const handleStartTest = async () => {
@@ -224,7 +215,8 @@ export default function App() {
     setActiveTab('speed');
     setPendingReport(null);
     setShowResults(false);
-    setSparklineData([]);
+    setDownloadSparklineData([]);
+    setUploadSparklineData([]);
     setActiveMetrics({});
     setHeroValue('0');
     setHeroUnit('Mbps');
@@ -234,12 +226,24 @@ export default function App() {
     orchestratorRef.current = orchestrator;
 
     try {
+      const effectiveDownloadLimitBytes = dataSaverMode
+        ? 3 * 1024 * 1024
+        : useDownloadCap
+          ? maxDownloadMb * 1024 * 1024
+          : undefined;
+
+      const effectiveUploadLimitBytes = dataSaverMode
+        ? 1.5 * 1024 * 1024
+        : useUploadCap
+          ? maxUploadMb * 1024 * 1024
+          : undefined;
+
       const report = await orchestrator.runAssessment({
         pingTarget,
         dnsDomain,
         useMlab,
-        maxDownloadBytes: (dataSaverMode ? 3 : maxDownloadMb) * 1024 * 1024,
-        maxUploadBytes: (dataSaverMode ? 1.5 : maxUploadMb) * 1024 * 1024,
+        maxDownloadBytes: effectiveDownloadLimitBytes,
+        maxUploadBytes: effectiveUploadLimitBytes,
         onProgress: (p: AssessmentProgress) => {
           setTestStage(p.stage);
           setStageName(p.stageName);
@@ -249,7 +253,6 @@ export default function App() {
           if (p.stage !== lastPhaseRef.current) {
             triggerHaptic('phase');
             lastPhaseRef.current = p.stage;
-            if (p.stage === 'measuring_upload') setSparklineData([]);
           }
 
           // Parse and update real-time telemetry readout
@@ -273,7 +276,7 @@ export default function App() {
             }
             const throughputSample = p.throughputSample;
             if (throughputSample) {
-              setSparklineData((prev) => [...prev.slice(-29), throughputSample]);
+              setDownloadSparklineData((prev) => [...prev.slice(-29), throughputSample]);
             }
           } else if (p.stage === 'measuring_upload') {
             const match = p.currentMetricValue?.match(/([\d.]+)\s*Mbps/);
@@ -286,7 +289,7 @@ export default function App() {
             }
             const throughputSample = p.throughputSample;
             if (throughputSample) {
-              setSparklineData((prev) => [...prev.slice(-29), throughputSample]);
+              setUploadSparklineData((prev) => [...prev.slice(-29), throughputSample]);
             }
           } else if (p.stage === 'measuring_loaded_latency') {
             const match = p.currentMetricValue?.match(/(\d+)\s*ms/);
@@ -307,8 +310,14 @@ export default function App() {
 
       const downloadSamples = report.rawMeasurements.downloadThroughput.samples;
       const firstDownloadTimestamp = downloadSamples[0]?.timestamp ?? 0;
-      setSparklineData(downloadSamples.map((sample) => ({
+      setDownloadSparklineData(downloadSamples.map((sample) => ({
         elapsedMs: Math.max(0, sample.timestamp - firstDownloadTimestamp),
+        mbps: sample.instantMbps,
+      })));
+      const uploadSamples = report.rawMeasurements.uploadThroughput.samples;
+      const firstUploadTimestamp = uploadSamples[0]?.timestamp ?? 0;
+      setUploadSparklineData(uploadSamples.map((sample) => ({
+        elapsedMs: Math.max(0, sample.timestamp - firstUploadTimestamp),
         mbps: sample.instantMbps,
       })));
 
@@ -390,18 +399,23 @@ export default function App() {
       {/* 0. Initial Animated Splash Screen Overlay */}
       {isSplashActive && (
         <div
-          className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-app-canvas transition-opacity duration-300 ${
+          className={`splash-screen fixed inset-0 z-50 flex flex-col items-center justify-center transition-opacity duration-300 ${
             splashFading ? 'opacity-0 pointer-events-none' : 'opacity-100'
           }`}
         >
-          <div className="relative flex h-40 w-40 items-center justify-center">
-            <div className="absolute h-36 w-36 rounded-full border border-cyan-400/30 splash-sweep" aria-hidden="true" />
-            <div className="splash-mark relative flex h-28 w-28 items-center justify-center rounded-2xl border border-cyan-400/35 bg-app-surface shadow-xl shadow-cyan-950/40">
-              <img src="/speedxpat-logo.png" alt="SpeedXpat Logo" className="h-16 w-16 object-contain" />
+          <div className="relative flex h-56 w-56 items-center justify-center">
+            <div className="splash-aura pointer-events-none absolute h-48 w-48 rounded-full bg-cyan-400/10 blur-3xl" aria-hidden="true" />
+            <div className="absolute h-48 w-48 rounded-full border border-cyan-400/20 splash-sweep" aria-hidden="true" />
+            <div className="splash-mark relative flex items-center justify-center">
+              <img
+                src="/speedxpat-logo.svg"
+                alt="SpeedXpat Logo"
+                className="h-44 w-44 object-contain drop-shadow-[0_0_24px_rgba(6,182,212,0.35)]"
+              />
             </div>
           </div>
           <div className="splash-title mt-7 text-center">
-            <h1 className="font-mono text-2xl font-extrabold tracking-tight text-app-primary">
+            <h1 className="text-2xl font-semibold text-app-primary">
               Speed<span className="text-cyan-400">Xpat</span>
             </h1>
             <p className="mt-1.5 font-mono text-xs uppercase tracking-wider text-app-muted">
@@ -457,6 +471,7 @@ export default function App() {
             </button>
           </div>
         )}
+        <div key={activeTab} className="app-view-enter">
         {activeTab === 'speed' && (
           <SpeedTestHome
             networkInfo={networkInfo}
@@ -469,10 +484,9 @@ export default function App() {
             heroValue={heroValue}
             heroUnit={heroUnit}
             heroLabel={heroLabel}
-            sparklineData={sparklineData}
+            downloadSparklineData={downloadSparklineData}
+            uploadSparklineData={uploadSparklineData}
             activeMetrics={activeMetrics}
-            advancedMode={advancedMode}
-            onToggleAdvancedMode={handleToggleAdvancedMode}
             onStartTest={handleStartTest}
             onCancelTest={handleCancelTest}
             onSaveAndClose={handleSaveAndClose}
@@ -497,6 +511,7 @@ export default function App() {
         {activeTab === 'trends' && (
           <TrendsTab
             history={history}
+            hasPendingResult={pendingReport !== null}
             onDeleteReport={handleDeleteReport}
             onClearAllHistory={handleClearAllHistory}
             onExportError={() => setAppError('The report could not be exported. Check available storage and try again.')}
@@ -508,6 +523,7 @@ export default function App() {
             }}
           />
         )}
+        </div>
       </main>
 
       {/* 3. 4-Tab Bottom Navigation Bar */}
@@ -525,6 +541,12 @@ export default function App() {
         setMaxDownloadMb={setMaxDownloadMb}
         maxUploadMb={maxUploadMb}
         setMaxUploadMb={setMaxUploadMb}
+        benchmarkMode={benchmarkMode}
+        setBenchmarkMode={setBenchmarkMode}
+        useDownloadCap={useDownloadCap}
+        setUseDownloadCap={setUseDownloadCap}
+        useUploadCap={useUploadCap}
+        setUseUploadCap={setUseUploadCap}
         concurrencyCount={concurrencyCount}
         setConcurrencyCount={setConcurrencyCount}
         dataSaverMode={dataSaverMode}

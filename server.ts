@@ -5,12 +5,46 @@
  */
 
 import { createServer as createViteServer } from 'vite';
+import { createServer as createHttpServer } from 'node:http';
 import express from 'express';
 import path from 'path';
 import 'dotenv/config';
 import { app } from './api';
 
-const PORT = process.env.PORT || 3000;
+const DEFAULT_PORT = Number(process.env.PORT || 3000);
+const httpServer = createHttpServer(app);
+
+function listenOnAvailablePort(port: number): Promise<number> {
+  return new Promise((resolve, reject) => {
+    const attemptListen = (candidatePort: number) => {
+      const cleanup = () => {
+        httpServer.off('listening', handleListening);
+        httpServer.off('error', handleError);
+      };
+      const handleListening = () => {
+        cleanup();
+        resolve(candidatePort);
+      };
+      const handleError = (error: NodeJS.ErrnoException) => {
+        cleanup();
+        if (error.code === 'EADDRINUSE') {
+          const nextPort = candidatePort + 1;
+          console.warn(`Port ${candidatePort} is busy, retrying on ${nextPort}.`);
+          attemptListen(nextPort);
+          return;
+        }
+
+        reject(error);
+      };
+
+      httpServer.once('listening', handleListening);
+      httpServer.once('error', handleError);
+      httpServer.listen(candidatePort);
+    };
+
+    attemptListen(port);
+  });
+}
 
 // 6. Mount Vite middleware in development or serve static in production
 async function startServer() {
@@ -21,15 +55,14 @@ async function startServer() {
     });
   } else {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: { middlewareMode: true, ws: { server: httpServer } },
       appType: 'spa',
     });
     app.use(vite.middlewares);
   }
 
-  app.listen(PORT, () => {
-    console.log(`SpeedXpat server listening on port ${PORT}`);
-  });
+  const actualPort = await listenOnAvailablePort(DEFAULT_PORT);
+  console.log(`SpeedXpat server listening on port ${actualPort}`);
 }
 
 startServer();

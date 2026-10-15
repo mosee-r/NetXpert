@@ -1,7 +1,7 @@
 import React from 'react';
-import { FileText, Power, Share2, SlidersHorizontal, X } from 'lucide-react';
+import { FileText, Power, Share2, X } from 'lucide-react';
 import { DeviceNetworkInfo, ThroughputChartPoint } from '../types/network';
-import { OverallAssessmentReport } from '../types/scoring';
+import { ActivityRating, OverallAssessmentReport } from '../types/scoring';
 import { AssessmentStage } from '../engines/orchestrator';
 import { ModernSpeedGauge } from './ModernSpeedGauge';
 import { KeyMetricsList } from './KeyMetricsMatrix';
@@ -100,7 +100,8 @@ interface SpeedTestHomeProps {
   heroValue: string;
   heroUnit: string;
   heroLabel: string;
-  sparklineData: ThroughputChartPoint[];
+  downloadSparklineData: ThroughputChartPoint[];
+  uploadSparklineData: ThroughputChartPoint[];
   activeMetrics: {
     downloadMbps?: number | null;
     uploadMbps?: number | null;
@@ -108,8 +109,6 @@ interface SpeedTestHomeProps {
     loadedPingMs?: number | null;
     jitterMs?: number | null;
   };
-  advancedMode: boolean;
-  onToggleAdvancedMode: () => void;
   onStartTest: () => void;
   onCancelTest: () => void;
   onSaveAndClose: () => void;
@@ -128,10 +127,9 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   heroValue,
   heroUnit,
   heroLabel,
-  sparklineData,
+  downloadSparklineData,
+  uploadSparklineData,
   activeMetrics,
-  advancedMode,
-  onToggleAdvancedMode,
   onStartTest,
   onCancelTest,
   onSaveAndClose,
@@ -165,7 +163,11 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
         loadedLatencyMs: report?.rawMeasurements.loadedLatency.underLoadLatencyMs ?? null,
         jitterMs: report?.rawMeasurements.idleLatency.jitterMs ?? null,
       };
-  const activeSamples: ThroughputCardSample[] = sparklineData.map((point) => ({
+  const liveDownloadSamples: ThroughputCardSample[] = downloadSparklineData.map((point) => ({
+    timestampMs: point.elapsedMs,
+    mbps: point.mbps,
+  }));
+  const liveUploadSamples: ThroughputCardSample[] = uploadSparklineData.map((point) => ({
     timestampMs: point.elapsedMs,
     mbps: point.mbps,
   }));
@@ -183,11 +185,27 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
       : 'idle'
     : report ? 'completed' : 'idle';
   const downloadSamples = isTesting
-    ? stage === 'measuring_download' ? activeSamples : []
+    ? liveDownloadSamples
     : reportDownloadSamples;
   const uploadSamples = isTesting
-    ? stage === 'measuring_upload' ? activeSamples : []
+    ? liveUploadSamples
     : reportUploadSamples;
+  const conciseSummaries: Record<ActivityRating, string> = {
+    excellent: 'Excellent for gaming, calls, 4K streaming, and large transfers.',
+    good: 'Reliable for HD streaming, calls, and everyday work.',
+    fair: 'Browsing and streaming are fine; gaming or large transfers may add lag.',
+    poor: 'High latency or limited bandwidth may disrupt calls, streaming, and gaming.',
+    insufficient_data: 'The test was incomplete; run diagnostics again for a full result.',
+    not_assessed: 'No capability rating is available for this test.',
+  };
+  const resultSummary = report
+    ? `${conciseSummaries[report.overallRating]}${
+        report.rawMeasurements.loadedLatency.loadedDeltaMs !== null &&
+        report.rawMeasurements.loadedLatency.loadedDeltaMs > 75
+          ? ` Ping rises ${Math.round(report.rawMeasurements.loadedLatency.loadedDeltaMs)} ms under load.`
+          : ''
+      }`
+    : '';
   const connectionStatus = networkInfo?.online === undefined
     ? 'Tap Start to check your internet speed'
     : networkInfo.online
@@ -204,28 +222,39 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 pb-24 lg:px-6">
       {!isTesting && !report ? (
-        <section className="flex flex-1 items-center justify-center py-8" aria-label="Speed test ready">
+        <section key="ready" className="test-state-enter flex flex-1 items-center justify-center py-8" aria-label="Speed test ready">
           <div className="flex w-full flex-col items-center px-4 text-center">
             <p className="mb-8 text-sm text-app-secondary">{connectionStatus}</p>
             <div className="relative flex items-center justify-center">
-              <span className="pointer-events-none absolute -inset-2 rounded-full border border-app-accent/20" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-3 rounded-full border border-app-accent/35 start-button-ring" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-2 rounded-full border border-app-accent/25" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-3 rounded-full border border-app-accent/40 start-button-ring" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-5 rounded-full border border-app-accent/20 start-button-ring-delayed" aria-hidden="true" />
               <button
                 onClick={onStartTest}
-                className="relative inline-flex h-32 w-32 items-center justify-center rounded-full bg-app-accent text-[#071421] transition-transform duration-200 hover:scale-[1.03] active:scale-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
+                disabled={isTesting}
                 aria-label="Start speed test"
+                aria-busy={isTesting}
+                className="start-button-glow group relative inline-flex h-32 w-32 items-center justify-center rounded-full bg-app-accent text-[#071421] transition-all duration-200 hover:scale-[1.04] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
               >
-                <Power className="h-10 w-10" aria-hidden="true" />
+                <span className="absolute inset-0 flex items-center justify-center">
+                  <Power className="h-10 w-10 transition-transform duration-300 group-hover:rotate-12" aria-hidden="true" />
+                </span>
+                <span className="absolute inset-x-0 bottom-4 text-center text-[10px] font-bold uppercase tracking-[0.2em] text-[#071421]">
+                  START
+                </span>
               </button>
             </div>
+            <p className="mt-6 text-[10px] font-mono uppercase tracking-[0.28em] text-app-muted">
+              {isTesting ? 'Starting probe…' : 'Diagnostic Probe Ready'}
+            </p>
           </div>
         </section>
       ) : isTesting ? (
-        <section className="grid flex-1 grid-cols-1 content-center gap-3 lg:grid-cols-[minmax(0,1.1fr)_minmax(360px,.9fr)] lg:items-center lg:gap-12" aria-label="Speed test in progress">
+        <section key="testing" className="test-state-enter grid flex-1 grid-cols-1 content-center gap-6 lg:grid-cols-[minmax(0,1.1fr)_minmax(0,.9fr)] lg:items-center lg:gap-8" aria-label="Speed test in progress">
           <div className="min-w-0 lg:col-span-2">
             <PhaseHud stage={stage} />
           </div>
-          <div className="lg:flex lg:flex-col lg:items-center">
+          <div className="min-w-0 lg:flex lg:flex-col lg:items-center">
             <ModernSpeedGauge
               value={currentSpeedMbps}
               phase={phase}
@@ -251,7 +280,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-col justify-center">
+          <div className="min-w-0 flex flex-col justify-center">
             <TwinThroughputCards
               downloadMbps={metrics.downloadMbps}
               uploadMbps={metrics.uploadMbps}
@@ -283,31 +312,17 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           </div>
         </section>
       ) : report ? (
-        <section className="mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 pt-2 pb-24" aria-label="Speed test results">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-app-divider pb-4">
-            <span className={`inline-flex w-fit items-center rounded-full border px-2.5 py-1 text-[10px] font-semibold uppercase ${ratingTone}`}>
-              {report.overallRating.replace(/_/g, ' ')} connection
-            </span>
-            <div className="flex items-center gap-3">
-              <time className="font-mono text-[10px] text-app-muted" dateTime={report.timestamp}>
+        <section key="results" className="test-state-enter mx-auto flex w-full max-w-4xl flex-1 flex-col gap-4 pt-2 pb-24" aria-label="Speed test results">
+          <div className="space-y-3 border-b border-app-divider pb-5">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-xl font-semibold capitalize text-app-primary">
+                {report.overallRating.replace(/_/g, ' ')} connection
+              </h2>
+              <time className="font-mono text-xs text-app-muted" dateTime={report.timestamp}>
                 {new Date(report.timestamp).toLocaleDateString()}
               </time>
-              <button
-                type="button"
-                onClick={onToggleAdvancedMode}
-                aria-pressed={advancedMode}
-                aria-label={advancedMode ? 'Hide advanced details' : 'Show advanced details'}
-                className={`inline-flex min-h-9 items-center gap-1.5 rounded-md border px-2.5 text-xs font-medium transition-colors ${
-                  advancedMode
-                    ? 'border-app-accent/40 bg-app-accent/10 text-app-accent-text'
-                    : 'border-app-divider text-app-secondary hover:bg-app-raised'
-                }`}
-              >
-                <SlidersHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
-                {advancedMode ? 'Advanced on' : 'Advanced details'}
-              </button>
             </div>
-            <p className="text-sm leading-6 text-app-secondary sm:w-full sm:order-3">{report.headlineSummary}</p>
+            <p className="max-w-2xl text-xs leading-5 text-app-secondary">{resultSummary}</p>
           </div>
 
           <TwinThroughputCards
@@ -316,30 +331,37 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             downloadSamples={downloadSamples}
             uploadSamples={uploadSamples}
             activePhase="completed"
+            compact
           />
 
-          <div>
-            <KeyMetricsList
-              metrics={metrics}
-              includeThroughput={false}
-              additionalRows={[
-                {
-                  label: 'DNS resolution',
-                  value: report.rawMeasurements.dnsTiming.durationMs === null
-                    ? 'Not measured'
-                    : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
-                },
-                {
-                  label: 'Public IP',
-                  value: report.networkInfo.ipAddress || 'Not recorded',
-                },
-                { label: 'Country', value: report.networkInfo.locationCountry || 'Not available' },
-                { label: 'City', value: report.networkInfo.locationCity || 'Not available' },
-                { label: 'Network', value: report.networkInfo.networkType },
-                { label: 'Provider', value: report.networkInfo.ispName || report.networkInfo.asnOrg || 'Not available' },
-              ]}
-            />
-          </div>
+          <KeyMetricsList
+            metrics={metrics}
+            includeThroughput={false}
+            additionalRows={[
+              {
+                label: 'DNS resolution',
+                value: report.rawMeasurements.dnsTiming.durationMs === null
+                  ? 'Not measured'
+                  : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
+              },
+              { label: 'Public IP', value: report.networkInfo.ipAddress || 'Not recorded' },
+              { label: 'Country', value: report.networkInfo.locationCountry || 'Not available' },
+              { label: 'City', value: report.networkInfo.locationCity || 'Not available' },
+              { label: 'Network', value: report.networkInfo.networkType },
+              { label: 'Provider', value: report.networkInfo.ispName || report.networkInfo.asnOrg || 'Not available' },
+            ]}
+          />
+
+          <details className="group border-b border-app-divider py-3">
+            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+              <span>Advanced details</span>
+              <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
+            </summary>
+            <div className="space-y-5 pt-4">
+              <WorkloadSuitability activities={report.activities} />
+              <DetailedTestBreakdown report={report} />
+            </div>
+          </details>
 
           <div className="flex flex-wrap justify-center gap-2.5">
             <button
@@ -384,10 +406,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             {canDiscardResult ? 'Save and close' : 'Close results'}
           </button>
 
-          <div className="pt-2">
-            <WorkloadSuitability activities={report.activities} />
-            {advancedMode && <DetailedTestBreakdown report={report} />}
-          </div>
         </section>
       ) : null}
     </div>

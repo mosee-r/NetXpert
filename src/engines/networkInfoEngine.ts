@@ -74,6 +74,13 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
   let locationCity: string | undefined;
   let locationRegion: string | undefined;
   let locationCountry: string | undefined;
+  let nearestServer: {
+    machine?: string;
+    hostname?: string;
+    city?: string;
+    country?: string;
+    label?: string;
+  } | undefined;
 
   // 1. Primary lookup: direct ipinfo.io lookup (resolves true client edge IP & ASN)
   try {
@@ -116,7 +123,46 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
     // Continue to server fallback
   }
 
-  // 2. Secondary lookup via backend resolver /api/network/isp if client-side was blocked
+  // 2. Free backend identity lookup: ISP + ASN + nearest M-Lab measurement server
+  if (!isAndroidNativeApp()) {
+    try {
+      const requestTimeout = createRequestTimeout(undefined, 5_000);
+      let res: Response | null;
+      try {
+        res = await fetch('/api/network/identity', {
+          cache: 'no-store',
+          signal: requestTimeout.signal,
+        }).catch(() => null);
+      } finally {
+        requestTimeout.dispose();
+      }
+      if (res && res.ok) {
+        const data = await res.json();
+        if (data.ok) {
+          if (!ipAddress) ipAddress = data.ip;
+          if (!ispName) ispName = data.isp;
+          if (!asn) asn = data.asn;
+          if (!asnOrg) asnOrg = data.org;
+          if (!locationCity) locationCity = data.city;
+          if (!locationRegion) locationRegion = data.region;
+          if (!locationCountry) locationCountry = data.country;
+          if (!nearestServer && data.nearestServer) {
+            nearestServer = {
+              machine: data.nearestServer.machine,
+              hostname: data.nearestServer.hostname,
+              city: data.nearestServer.city,
+              country: data.nearestServer.country,
+              label: data.nearestServer.label,
+            };
+          }
+        }
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  // 3. Secondary lookup via backend resolver /api/network/isp if client-side was blocked
   if (!isAndroidNativeApp() && (!ispName || !ipAddress)) {
     try {
       const requestTimeout = createRequestTimeout(undefined, 4_000);
@@ -146,7 +192,7 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
     }
   }
 
-  // 3. Fallback for IP if third-party providers failed
+  // 4. Fallback for IP if third-party providers failed
   if (!ipAddress) {
     try {
       const requestTimeout = createRequestTimeout(undefined, 4_000);
@@ -182,6 +228,7 @@ export async function detectNetworkInfo(): Promise<DeviceNetworkInfo> {
     locationCity,
     locationRegion,
     locationCountry,
+    nearestServer,
     wifiSsid,
     limitations,
   };

@@ -232,6 +232,17 @@
   }
 }
 
+@keyframes splashAura {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(0.9);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.08);
+  }
+}
+
 @keyframes splashMarkIn {
   0% {
     opacity: 0;
@@ -258,6 +269,25 @@
   }
 }
 
+@keyframes startButtonGlow {
+  0%, 100% {
+    box-shadow: 0 0 24px -4px color-mix(in srgb, var(--app-accent) 68%, transparent), 0 0 48px -10px color-mix(in srgb, var(--app-accent) 42%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 36px 2px color-mix(in srgb, var(--app-accent) 82%, transparent), 0 0 68px -4px color-mix(in srgb, var(--app-accent) 52%, transparent);
+  }
+}
+
+@keyframes gaugeArcPulse {
+  0%, 100% { opacity: 0.82; }
+  50% { opacity: 1; }
+}
+
+@keyframes appViewEnter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @layer utilities {
   .glow-cyan {
     box-shadow: 0 0 25px -4px rgba(6, 182, 212, 0.45), 0 0 10px -2px rgba(56, 189, 248, 0.3);
@@ -277,6 +307,14 @@
   .splash-sweep {
     animation: splashSweep 900ms ease-out 1 both;
   }
+  .splash-screen {
+    background:
+      radial-gradient(ellipse at 50% 43%, color-mix(in srgb, var(--app-accent) 12%, transparent), transparent 42%),
+      var(--app-canvas);
+  }
+  .splash-aura {
+    animation: splashAura 1.8s ease-in-out infinite;
+  }
   .splash-mark {
     animation: splashMarkIn 550ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
   }
@@ -286,11 +324,30 @@
   .start-button-ring {
     animation: startButtonRing 3s ease-out infinite;
   }
+  .start-button-ring-delayed {
+    animation: startButtonRing 3s ease-out 1.5s infinite;
+  }
+  .start-button-glow {
+    animation: startButtonGlow 2.4s ease-in-out infinite;
+  }
+  .gauge-active-arc {
+    animation: gaugeArcPulse 1.8s ease-in-out infinite;
+  }
+  .app-view-enter,
+  .test-state-enter {
+    animation: appViewEnter 220ms ease-out both;
+  }
   @media (prefers-reduced-motion: reduce) {
     .splash-sweep,
+    .splash-aura,
     .splash-mark,
     .splash-title,
-    .start-button-ring {
+    .start-button-ring,
+    .start-button-ring-delayed,
+    .start-button-glow,
+    .gauge-active-arc,
+    .app-view-enter,
+    .test-state-enter {
       animation: none;
     }
   }

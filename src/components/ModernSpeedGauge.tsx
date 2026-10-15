@@ -176,7 +176,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [targetAngle, prefersReducedMotion]);
 
   return (
-    <div className="mx-auto my-2 w-full max-w-[320px] select-none lg:max-w-[380px]">
+    <div className="mx-auto my-2 w-full max-w-[320px] select-none pt-7 lg:max-w-[380px]">
       <div className="relative flex items-center justify-center">
         {/* Ambient Pulsing Backlight Halo */}
         <div
@@ -235,6 +235,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
             strokeDasharray="100 100"
             strokeDashoffset={100 * (1 - progress)}
             filter={`url(#${glowId})`}
+            className={isRunning ? 'gauge-active-arc' : undefined}
           />
 
           {/* Tick Marks & Labels */}
@@ -329,8 +330,8 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
 
         {/* Floating Active Phase Badge */}
         {isRunning && (
-          <div className="absolute top-2.5 left-1/2 -translate-x-1/2 flex items-center gap-2 rounded-full border border-cyan-500/30 bg-slate-900/80 px-3 py-1 backdrop-blur-md shadow-lg shadow-cyan-950/50">
-            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping" />
+          <div className="absolute top-0 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-cyan-500/30 bg-slate-900/90 px-3 py-1 backdrop-blur-md shadow-lg shadow-cyan-950/50">
+            <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping motion-reduce:animate-none" />
             <span className="text-[11px] font-semibold text-cyan-300 uppercase tracking-wider">
               {phaseLabel}
             </span>

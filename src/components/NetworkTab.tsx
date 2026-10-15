@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { DeviceNetworkInfo } from '../types/network';
 import { OverallAssessmentReport } from '../types/scoring';
+import { isAndroidNativeApp } from '../engines/testEndpoints';
 
 interface NetworkTabProps {
   networkInfo: DeviceNetworkInfo | null;
@@ -33,6 +34,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [clipboardError, setClipboardError] = useState(false);
   const [refreshError, setRefreshError] = useState(false);
+  const isAndroidApp = isAndroidNativeApp();
 
   const isWifi = networkInfo?.networkType === 'wifi' || networkInfo?.networkType === 'unknown';
   const isCellular = networkInfo?.networkType === 'cellular';
@@ -66,9 +68,14 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
   const recentWifiRun = history.find((h) => h.networkInfo.networkType === 'wifi');
   const recentCellularRun = history.find((h) => h.networkInfo.networkType === 'cellular');
   const unavailable = 'Not available';
+  const notExposedInBrowser = 'Not exposed by browser';
   const formatMetric = (value: number | null | undefined, unit: string) =>
     value === null || value === undefined || !Number.isFinite(value)
       ? 'Not available'
+      : `${value} ${unit}`;
+  const formatDeviceMetric = (value: number | null | undefined, unit: string) =>
+    value === null || value === undefined || !Number.isFinite(value)
+      ? isAndroidApp ? unavailable : notExposedInBrowser
       : `${value} ${unit}`;
 
   return (
@@ -107,6 +114,12 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         )}
       </div>
 
+      {!isAndroidApp && (
+        <p role="note" className="rounded-lg border border-app-divider bg-app-surface px-3 py-2 text-xs leading-5 text-app-secondary">
+          Browser privacy limits access to Wi-Fi/cellular radio details, local IP, router, and DNS resolver data. Missing values are unavailable to this browser, not evidence of a network fault.
+        </p>
+      )}
+
       {/* 1. ISP identity from a separate public IP-to-ASN lookup */}
       <div className="p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/30 space-y-4 shadow-xl">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
@@ -125,7 +138,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         </p>
 
         {/* 4-Box Telemetry Matrix for ISP & ASN */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5 text-xs font-mono">
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
             <span className="text-[10px] text-slate-400 block uppercase">ISP Provider</span>
             <span className="text-sm font-bold text-emerald-400 truncate block" title={networkInfo?.ispName}>
@@ -141,7 +154,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
-            <span className="text-[10px] text-slate-400 block uppercase">Public IP Address</span>
+            <span className="text-[10px] text-slate-400 block uppercase">Public IP</span>
             <span className="text-sm font-bold text-indigo-300 truncate block" title={networkInfo?.ipAddress}>
               {networkInfo?.ipAddress || unavailable}
             </span>
@@ -156,6 +169,20 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               {[networkInfo?.locationCity, networkInfo?.locationCountry].filter(Boolean).join(', ') || unavailable}
             </span>
           </div>
+
+          <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
+            <span className="text-[10px] text-slate-400 block uppercase">Nearest Server</span>
+            <span className="text-sm font-bold text-violet-300 truncate block" title={networkInfo?.nearestServer?.label}>
+              {networkInfo?.nearestServer?.city || networkInfo?.nearestServer?.hostname || unavailable}
+            </span>
+          </div>
+        </div>
+
+        <div className="p-3 rounded-xl bg-slate-900/60 border border-violet-500/20 text-[11px] text-slate-300">
+          <span className="font-semibold text-violet-300 block mb-1">Nearest public measurement server</span>
+          <span className="font-mono text-slate-200">
+            {networkInfo?.nearestServer?.label || 'No nearest M-Lab server was resolved yet.'}
+          </span>
         </div>
 
         {/* Detailed ASN & Geolocation Attributes with Copy */}
@@ -216,7 +243,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
       </div>
 
       {/* 2. Android Permission Context Notice */}
-      <div className="p-3.5 rounded-2xl bg-[#0E1A2E] border border-amber-500/30 text-xs text-amber-200/90 flex items-start space-x-3">
+      {isAndroidApp && <div className="p-3.5 rounded-2xl bg-[#0E1A2E] border border-amber-500/30 text-xs text-amber-200/90 flex items-start space-x-3">
         <ShieldAlert className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div>
           <span className="font-semibold text-amber-300 block mb-0.5">Android Location (GPS) Telemetry Notice</span>
@@ -224,7 +251,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             On Android 10+ (API 29+), system Location Services must be toggled on for applications to read raw Wi-Fi SSIDs and BSSID hardware MAC addresses. SpeedXpat never collects GPS coordinates or tracks user location.
           </p>
         </div>
-      </div>
+      </div>}
 
       {/* 3. Active Link Telemetry (Wi-Fi or Cellular) */}
       <div className="p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-4 shadow-xl">
@@ -232,7 +259,9 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
           <div className="flex items-center space-x-2">
             {isWifi ? <Wifi className="w-4 h-4 text-cyan-400" /> : <Radio className="w-4 h-4 text-indigo-400" />}
             <span className="text-sm font-bold text-white">
-              {isWifi ? 'Active Wi-Fi Link Parameters' : 'Cellular Mobile Interface'}
+              {!isAndroidApp && networkInfo?.networkType === 'unknown'
+                ? 'Browser Network Details'
+                : isWifi ? 'Active Wi-Fi Link Parameters' : 'Cellular Mobile Interface'}
             </span>
           </div>
           <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-cyan-950 text-cyan-300 border border-cyan-800">
@@ -244,21 +273,21 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
             <span className="text-[10px] text-slate-400 block uppercase">Reported Downlink</span>
             <span className="text-base font-bold text-cyan-300">
-              {formatMetric(networkInfo?.downlinkMbps, 'Mbps')}
+              {formatDeviceMetric(networkInfo?.downlinkMbps, 'Mbps')}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
             <span className="text-[10px] text-slate-400 block uppercase">Wi-Fi Frequency</span>
             <span className="text-base font-bold text-indigo-300">
-              {formatMetric(networkInfo?.wifiFrequencyMhz, 'MHz')}
+              {formatDeviceMetric(networkInfo?.wifiFrequencyMhz, 'MHz')}
             </span>
           </div>
 
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5">
             <span className="text-[10px] text-slate-400 block uppercase">Wi-Fi Signal (RSSI)</span>
             <span className="text-base font-bold text-emerald-400">
-              {formatMetric(networkInfo?.wifiSignalDbm, 'dBm')}
+              {formatDeviceMetric(networkInfo?.wifiSignalDbm, 'dBm')}
             </span>
           </div>
         </div>
@@ -266,10 +295,10 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         {/* IP Addresses & Gateway Rows with copy */}
         <div className="space-y-2 pt-2 border-t border-white/5 text-xs">
           {[
-            { key: 'internal_ip', label: 'Local Device IP', val: 'Not available' },
-            { key: 'gateway_ip', label: 'Default Router Gateway', val: 'Not available' },
+            { key: 'internal_ip', label: 'Local Device IP', val: isAndroidApp ? unavailable : notExposedInBrowser },
+            { key: 'gateway_ip', label: 'Default Router Gateway', val: isAndroidApp ? unavailable : notExposedInBrowser },
             { key: 'public_ip', label: 'Public IP', val: networkInfo?.ipAddress || unavailable },
-            { key: 'dns_resolvers', label: 'DNS Resolvers', val: 'Not available' },
+            { key: 'dns_resolvers', label: 'DNS Resolvers', val: isAndroidApp ? unavailable : notExposedInBrowser },
           ].map((row) => (
             <div
               key={row.key}
@@ -280,8 +309,8 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
                 <span className="font-mono text-slate-200 font-semibold">{row.val}</span>
               </div>
               <button
-                onClick={() => row.val !== 'Not available' && row.val !== 'Checking...' && copyToClipboard(row.key, row.val)}
-                disabled={row.val === 'Not available' || row.val === 'Checking...'}
+                onClick={() => row.val !== unavailable && row.val !== notExposedInBrowser && row.val !== 'Checking...' && copyToClipboard(row.key, row.val)}
+                disabled={row.val === unavailable || row.val === notExposedInBrowser || row.val === 'Checking...'}
                 className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer"
                 title="Copy to clipboard"
               >

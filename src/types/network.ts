@@ -116,6 +116,14 @@ export interface HttpTimingResult {
   limitations: string[];
 }
 
+export interface NearestMeasurementServer {
+  machine?: string;
+  hostname?: string;
+  city?: string;
+  country?: string;
+  label?: string;
+}
+
 export interface DeviceNetworkInfo {
   networkType: NetworkType;
   effectiveType?: string; // "slow-2g" | "2g" | "3g" | "4g"
@@ -130,6 +138,7 @@ export interface DeviceNetworkInfo {
   locationCity?: string;
   locationRegion?: string;
   locationCountry?: string;
+  nearestServer?: NearestMeasurementServer;
   wifiSsid?: string;
   wifiSignalDbm?: number;
   wifiFrequencyMhz?: number;

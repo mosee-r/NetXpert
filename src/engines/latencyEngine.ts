@@ -52,29 +52,36 @@ export async function measureLatency(
       const sep = targetUrl.includes('?') ? '&' : '?';
       const probeUrl = `${targetUrl}${sep}_t=${Date.now()}_${i}`;
 
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+      const fetchProbe = async (method: 'GET' | 'HEAD'): Promise<Response> => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        const abortListener = () => controller.abort();
+        if (signal) signal.addEventListener('abort', abortListener, { once: true });
 
-      const abortListener = () => controller.abort();
-      if (signal) signal.addEventListener('abort', abortListener, { once: true });
-
-      let response: Response;
-      try {
-        response = await fetch(probeUrl, {
-          method: 'GET',
-          headers: { Range: 'bytes=0-0' },
-          cache: 'no-store',
-          signal: controller.signal,
-        }).catch(async () => {
+        try {
           return await fetch(probeUrl, {
-            method: 'HEAD',
+            method,
+            ...(method === 'GET' ? { headers: { Range: 'bytes=0-0' } } : {}),
             cache: 'no-store',
             signal: controller.signal,
           });
-        });
-      } finally {
-        clearTimeout(timeoutId);
-        if (signal) signal.removeEventListener('abort', abortListener);
+        } finally {
+          clearTimeout(timeoutId);
+          if (signal) signal.removeEventListener('abort', abortListener);
+        }
+      };
+
+      let response: Response;
+      try {
+        response = await fetchProbe('GET');
+      } catch (error: unknown) {
+        if (
+          signal?.aborted ||
+          (error instanceof DOMException && error.name === 'AbortError')
+        ) {
+          throw error;
+        }
+        response = await fetchProbe('HEAD');
       }
 
       const elapsed = Math.round(performance.now() - start);
@@ -101,7 +108,7 @@ export async function measureLatency(
       onProbeProgress?.(completedProbeCount, samples.length, failedProbeCount);
     }
 
-    // Small inter-probe pacing interval (50ms)
+    // Small inter-probe pacing interval.
     await new Promise((r) => setTimeout(r, 60));
   }
 

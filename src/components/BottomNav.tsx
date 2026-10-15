@@ -42,10 +42,10 @@ export const BottomNav: React.FC<BottomNavProps> = ({
               onClick={() => handleTabClick(tab.id)}
               aria-current={isActive ? 'page' : undefined}
               aria-label={tab.label}
-              className="flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 transition-colors"
+              className="flex min-w-0 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 transition-colors duration-200"
             >
               <div
-                className={`flex h-7 w-8 items-center justify-center rounded-md ${isActive ? 'text-app-accent-text' : 'text-app-muted'}`}
+                className={`flex h-7 w-8 items-center justify-center rounded-md transition-transform duration-200 ${isActive ? '-translate-y-0.5 text-app-accent-text' : 'text-app-muted'}`}
               >
                 <Icon className="h-4 w-4" aria-hidden="true" />
               </div>

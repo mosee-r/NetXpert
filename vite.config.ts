@@ -3,9 +3,19 @@ import react from '@vitejs/plugin-react';
 import path from 'path';
 import {defineConfig} from 'vite';
 
-export default defineConfig(() => {
+export default defineConfig(({ command }) => {
+  const devCspPlugin = {
+    name: 'speedxpat-dev-csp',
+    transformIndexHtml(html: string) {
+      return html.replace(
+        "connect-src 'self' https: wss:;",
+        "connect-src 'self' https: wss: ws://localhost:*;"
+      );
+    },
+  };
+
   return {
-    plugins: [react(), tailwindcss()],
+    plugins: [react(), tailwindcss(), ...(command === 'serve' ? [devCspPlugin] : [])],
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),
