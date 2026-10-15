@@ -6,7 +6,7 @@
     "type": "git",
     "url": "https://github.com/phillipsezria-glitch/SpeedXpat.git"
   },
-  "homepage": "https://netxpert-pi.vercel.app",
+  "homepage": "https://speedxpat.vercel.app/",
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",

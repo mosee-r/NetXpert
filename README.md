@@ -5,7 +5,7 @@ SpeedXpat is a network diagnostics and capability assessment app for measuring i
 It combines a Vite + React frontend, a small Node/Express server, and a native Android WebView shell so the same experience can run in the browser and on mobile.
 
 **Official repository:** [phillipsezria-glitch/SpeedXpat](https://github.com/phillipsezria-glitch/SpeedXpat)  
-**Live app:** [netxpert-pi.vercel.app](https://netxpert-pi.vercel.app)
+**Live app:** [speedxpat.vercel.app](https://speedxpat.vercel.app/)
 
 ## Features
 
