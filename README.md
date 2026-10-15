@@ -6,6 +6,7 @@ It combines a Vite + React frontend, a small Node/Express server, and a native A
 
 **Official repository:** [phillipsezria-glitch/SpeedXpat](https://github.com/phillipsezria-glitch/SpeedXpat)  
 **Live app:** [speedxpat.vercel.app](https://speedxpat.vercel.app/)
+**Latest release:** [Download the latest Android APK](https://github.com/phillipsezria-glitch/SpeedXpat/releases/latest)
 
 ## Features
 
