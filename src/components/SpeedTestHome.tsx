@@ -399,7 +399,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           </div>
         </section>
       ) : report ? (
-        <section key="results" className="test-state-enter mx-auto flex w-full max-w-4xl flex-1 flex-col gap-2 pt-2 pb-24 sm:gap-4" aria-label="Speed test results">
+        <section key="results" className="test-state-enter mx-auto flex w-full max-w-6xl flex-1 flex-col gap-3 pt-2 pb-24 sm:gap-5" aria-label="Speed test results">
           <div className="space-y-2 border-b border-app-divider pb-3 sm:space-y-3 sm:pb-5">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className={`inline-flex items-center gap-2 text-xl font-semibold capitalize ${ratingTextTone}`}>
@@ -413,102 +413,110 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             <p className="max-w-2xl text-xs leading-5 text-app-secondary">{resultSummary}</p>
           </div>
 
-          <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:gap-y-2" aria-label="Activity suitability summary">
-            {report.activities.map((activity) => {
-              const activityRating = activity.rating;
-              const activityTone = activityRating === 'excellent' || activityRating === 'good'
-                ? 'text-emerald-300'
-                : activityRating === 'fair'
-                ? 'text-amber-300'
-                : activityRating === 'poor'
-                ? 'text-rose-300'
-                : 'text-app-muted';
-              const activityDot = activityRating === 'excellent' || activityRating === 'good'
-                ? 'bg-emerald-400'
-                : activityRating === 'fair'
-                ? 'bg-amber-400'
-                : activityRating === 'poor'
-                ? 'bg-rose-400'
-                : 'bg-slate-500';
-              const activityLabel = activityRating === 'excellent'
-                ? 'Great'
-                : activityRating === 'good'
-                ? 'OK'
-                : activityRating === 'fair'
-                ? 'Fair'
-                : activityRating === 'poor'
-                ? 'Risky'
-                : 'Not tested';
-              const shortActivityName: Record<string, string> = {
-                gaming: 'Gaming',
-                streaming: 'Streaming',
-                conferencing: 'Video calls',
-                browsing: 'Browsing',
-                remote_work: 'Remote work',
-                transfers: 'Transfers',
-              };
-              return (
-                <div key={activity.activityId} className="min-w-0 border-b border-app-divider py-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="truncate text-[11px] font-semibold text-app-primary sm:text-xs" title={activity.displayName}>
-                      {shortActivityName[activity.activityId] || activity.displayName}
+          <div className="grid min-w-0 grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] lg:gap-8">
+            <div className="min-w-0">
+              <TwinThroughputCards
+                downloadMbps={metrics.downloadMbps}
+                uploadMbps={metrics.uploadMbps}
+                downloadSamples={downloadSamples}
+                uploadSamples={uploadSamples}
+                activePhase="completed"
+                compact
+              />
+
+              <section className="border-y border-app-divider py-3" aria-label="Latency comparison under load">
+                <div className="mb-3 flex items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold text-app-primary">Latency under load</h3>
+                  {latencyDelta !== null && (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${toneClasses[deltaTone(latencyDelta)].split(' ')[1]}`}>
+                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${toneClasses[deltaTone(latencyDelta)].split(' ')[0]}`} />
+                      +{Math.round(latencyDelta)} ms
                     </span>
-                    <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold ${activityTone}`}>
-                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${activityDot}`} />
-                      {activityLabel}
-                    </span>
-                  </div>
-                  <p className="mt-1 hidden text-[11px] leading-4 text-app-muted sm:line-clamp-2 sm:block" title={activity.summary}>
-                    {activity.summary}
-                  </p>
+                  )}
                 </div>
-              );
-            })}
+                {[
+                  { label: 'Idle', value: idleLatency },
+                  { label: 'Loaded', value: loadedLatency },
+                ].map((row) => {
+                  const tone = row.value === null ? 'warning' : latencyTone(row.value);
+                  return (
+                    <div key={row.label} className="mb-2 last:mb-0">
+                      <div className="mb-1 flex items-center justify-between text-xs">
+                        <span className="text-app-secondary">{row.label}</span>
+                        <span className={`font-mono font-semibold ${toneClasses[tone].split(' ')[1]}`}>
+                          {row.value === null ? 'Not measured' : `${Math.round(row.value)} ms`}
+                        </span>
+                      </div>
+                      <div className="h-1.5 overflow-hidden rounded-full bg-app-divider" aria-hidden="true">
+                        <div
+                          className={`h-full rounded-full ${toneClasses[tone].split(' ')[0]}`}
+                          style={{ width: row.value === null ? '0%' : `${Math.max(4, (row.value / latencyScale) * 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </section>
+            </div>
+
+            <div className="min-w-0">
+              <h3 className="mb-2 text-sm font-semibold text-app-primary">Activity suitability</h3>
+              <div className="grid grid-cols-2 gap-x-3 gap-y-1 sm:grid-cols-3 sm:gap-y-2 lg:grid-cols-2 lg:gap-x-4" aria-label="Activity suitability summary">
+                {report.activities.map((activity) => {
+                  const activityRating = activity.rating;
+                  const activityTone = activityRating === 'excellent' || activityRating === 'good'
+                    ? 'text-emerald-300'
+                    : activityRating === 'fair'
+                    ? 'text-amber-300'
+                    : activityRating === 'poor'
+                    ? 'text-rose-300'
+                    : 'text-app-muted';
+                  const activityDot = activityRating === 'excellent' || activityRating === 'good'
+                    ? 'bg-emerald-400'
+                    : activityRating === 'fair'
+                    ? 'bg-amber-400'
+                    : activityRating === 'poor'
+                    ? 'bg-rose-400'
+                    : 'bg-slate-500';
+                  const activityLabel = activityRating === 'excellent'
+                    ? 'Great'
+                    : activityRating === 'good'
+                    ? 'OK'
+                    : activityRating === 'fair'
+                    ? 'Fair'
+                    : activityRating === 'poor'
+                    ? 'Risky'
+                    : 'Not tested';
+                  const shortActivityName: Record<string, string> = {
+                    gaming: 'Gaming',
+                    streaming: 'Streaming',
+                    conferencing: 'Video calls',
+                    browsing: 'Browsing',
+                    remote_work: 'Remote work',
+                    transfers: 'Transfers',
+                  };
+                  return (
+                    <div key={activity.activityId} className="min-w-0 border-b border-app-divider py-2">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="truncate text-[11px] font-semibold text-app-primary sm:text-xs" title={activity.displayName}>
+                          {shortActivityName[activity.activityId] || activity.displayName}
+                        </span>
+                        <span className={`inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold ${activityTone}`}>
+                          <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${activityDot}`} />
+                          {activityLabel}
+                        </span>
+                      </div>
+                      <p className="mt-1 hidden text-[11px] leading-4 text-app-muted sm:line-clamp-2 sm:block" title={activity.summary}>
+                        {activity.summary}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </div>
 
-          <TwinThroughputCards
-            downloadMbps={metrics.downloadMbps}
-            uploadMbps={metrics.uploadMbps}
-            downloadSamples={downloadSamples}
-            uploadSamples={uploadSamples}
-            activePhase="completed"
-            compact
-          />
-
-          <section className="border-y border-app-divider py-3" aria-label="Latency comparison under load">
-            <div className="mb-3 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-app-primary">Latency under load</h3>
-              {latencyDelta !== null && (
-                <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${toneClasses[deltaTone(latencyDelta)].split(' ')[1]}`}>
-                  <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${toneClasses[deltaTone(latencyDelta)].split(' ')[0]}`} />
-                  +{Math.round(latencyDelta)} ms
-                </span>
-              )}
-            </div>
-            {[
-              { label: 'Idle', value: idleLatency },
-              { label: 'Loaded', value: loadedLatency },
-            ].map((row) => {
-              const tone = row.value === null ? 'warning' : latencyTone(row.value);
-              return (
-                <div key={row.label} className="mb-2 last:mb-0">
-                  <div className="mb-1 flex items-center justify-between text-xs">
-                    <span className="text-app-secondary">{row.label}</span>
-                    <span className={`font-mono font-semibold ${toneClasses[tone].split(' ')[1]}`}>
-                      {row.value === null ? 'Not measured' : `${Math.round(row.value)} ms`}
-                    </span>
-                  </div>
-                  <div className="h-1.5 overflow-hidden rounded-full bg-app-divider" aria-hidden="true">
-                    <div
-                      className={`h-full rounded-full ${toneClasses[tone].split(' ')[0]}`}
-                      style={{ width: row.value === null ? '0%' : `${Math.max(4, (row.value / latencyScale) * 100)}%` }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </section>
-
+          <h3 className="text-sm font-semibold text-app-primary">Connection details</h3>
           <KeyMetricsList
             metrics={metrics}
             includeThroughput={false}
