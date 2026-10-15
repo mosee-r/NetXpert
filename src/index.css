@@ -293,11 +293,15 @@
   .speed-test-home {
     padding-bottom: calc(80px + env(safe-area-inset-bottom));
   }
+  .speed-test-home.speed-test-home-ready {
+    min-height: calc(100dvh - 10rem);
+    padding-bottom: 0;
+  }
   .speed-gauge {
     width: min(78vw, 34dvh, 380px);
   }
   .start-cta {
-    width: clamp(12rem, 56vw, 15.5rem);
+    width: min(clamp(12rem, 56vw, 15.5rem), 36dvh);
     aspect-ratio: 1;
   }
   .start-button-halo {

@@ -292,45 +292,47 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     : 'text-app-secondary';
 
   return (
-    <div className="speed-test-home mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 lg:px-6">
+    <div className={`speed-test-home mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 lg:px-6 ${!isTesting && !report ? 'speed-test-home-ready' : ''}`}>
       {!isTesting && !report ? (
-        <section key="ready" className="test-state-enter flex flex-1 items-center justify-center py-12" aria-label="Speed test ready">
-          <div className="flex w-full max-w-xl flex-col items-center px-4 text-center">
-            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-md">
+        <section key="ready" className="test-state-enter grid flex-1 grid-rows-[minmax(0,1fr)_auto_minmax(0,1fr)] justify-items-center py-4" aria-label="Speed test ready">
+          <div className="flex w-full max-w-xl flex-col items-center justify-end px-4 pb-3 text-center">
+            <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-md">
               <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]" aria-hidden="true" />
               <span className="text-[10px] font-medium uppercase tracking-[0.30em] text-app-secondary">Ready</span>
             </div>
 
             {connectionStatus && (
-              <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 shadow-[0_18px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur-sm">
+              <div className="mt-3 rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 shadow-[0_18px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur-sm">
                 <p className="text-[11px] font-medium uppercase tracking-[0.34em] text-app-secondary">{connectionStatus}</p>
               </div>
             )}
             {lastTestSummary && (
-              <p className="mt-5 max-w-md text-sm text-app-muted">{lastTestSummary}</p>
+              <p className="mt-3 max-w-md text-sm text-app-muted">{lastTestSummary}</p>
             )}
+          </div>
 
-            <div className="relative mt-12 flex items-center justify-center">
-              <span className="start-button-halo pointer-events-none absolute -inset-12 rounded-full bg-cyan-400/25 blur-3xl" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-5 rounded-full border border-cyan-400/30 bg-cyan-500/5" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-6 rounded-full border border-cyan-400/40 start-button-ring" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-9 rounded-full border border-cyan-400/20 start-button-ring-delayed" aria-hidden="true" />
-              <button
-                onClick={onStartTest}
-                disabled={isTesting}
-                aria-label="Start speed test"
-                aria-busy={isTesting}
-                className="start-cta group relative inline-flex items-center justify-center rounded-full border border-white/25 bg-[linear-gradient(180deg,rgba(186,230,253,0.96),rgba(103,232,249,0.96)_30%,rgba(14,165,233,0.97)_100%)] text-[#071421] shadow-[0_24px_80px_-24px_rgba(34,211,238,0.95)] ring-1 ring-cyan-100/30 transition-all duration-250 hover:scale-[1.06] hover:shadow-[0_28px_90px_-22px_rgba(34,211,238,1)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
-              >
-                <span className="absolute inset-[1px] rounded-full bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.75),rgba(255,255,255,0.08)_34%,transparent_56%)]" aria-hidden="true" />
-                <span className="relative text-[2rem] font-black uppercase tracking-[0.08em] text-[#071421] sm:text-[2.4rem]">
-                  Start
-                </span>
-              </button>
-            </div>
+          <div className="relative flex items-center justify-center">
+            <span className="start-button-halo pointer-events-none absolute -inset-12 rounded-full bg-cyan-400/25 blur-3xl" aria-hidden="true" />
+            <span className="pointer-events-none absolute -inset-5 rounded-full border border-cyan-400/30 bg-cyan-500/5" aria-hidden="true" />
+            <span className="pointer-events-none absolute -inset-6 rounded-full border border-cyan-400/40 start-button-ring" aria-hidden="true" />
+            <span className="pointer-events-none absolute -inset-9 rounded-full border border-cyan-400/20 start-button-ring-delayed" aria-hidden="true" />
+            <button
+              onClick={onStartTest}
+              disabled={isTesting}
+              aria-label="Start speed test"
+              aria-busy={isTesting}
+              className="start-cta group relative inline-flex items-center justify-center rounded-full border border-white/25 bg-[linear-gradient(180deg,rgba(186,230,253,0.96),rgba(103,232,249,0.96)_30%,rgba(14,165,233,0.97)_100%)] text-[#071421] shadow-[0_24px_80px_-24px_rgba(34,211,238,0.95)] ring-1 ring-cyan-100/30 transition-all duration-250 hover:scale-[1.06] hover:shadow-[0_28px_90px_-22px_rgba(34,211,238,1)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
+            >
+              <span className="absolute inset-[1px] rounded-full bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.75),rgba(255,255,255,0.08)_34%,transparent_56%)]" aria-hidden="true" />
+              <span className="relative text-[2rem] font-black uppercase tracking-[0.08em] text-[#071421] sm:text-[2.4rem]">
+                Start
+              </span>
+            </button>
+          </div>
 
+          <div className="flex w-full max-w-xl items-start justify-center px-4 pt-3 text-center">
             {networkContext && (
-              <p className="mt-8 max-w-lg text-sm text-app-secondary">{networkContext}</p>
+              <p className="max-w-lg text-sm text-app-secondary">{networkContext}</p>
             )}
           </div>
         </section>
