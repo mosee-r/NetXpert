@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileText, HelpCircle, Share2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, FileText, HelpCircle, RotateCcw, Save, Share2, Trash2, X, XCircle } from 'lucide-react';
 import { DeviceNetworkInfo, ThroughputChartPoint } from '../types/network';
 import { ActivityRating, OverallAssessmentReport } from '../types/scoring';
 import { AssessmentStage } from '../engines/orchestrator';
@@ -231,9 +231,9 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     .filter((value): value is string => Boolean(value))
     .join(' · ');
   const connectionStatus = networkInfo?.online === undefined
-    ? 'Tap Start to check your internet speed'
+    ? ''
     : networkInfo.online
-    ? 'Tap Start to check your internet speed'
+    ? ''
     : 'Offline · reconnect to test';
   const ratingTone = report?.overallRating === 'excellent' || report?.overallRating === 'good'
     ? 'border-app-success/25 bg-app-success-soft text-app-success'
@@ -294,31 +294,43 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
   return (
     <div className="speed-test-home mx-auto flex min-h-[calc(100dvh-9rem)] w-full max-w-6xl flex-col px-1 lg:px-6">
       {!isTesting && !report ? (
-        <section key="ready" className="test-state-enter flex flex-1 items-center justify-center py-8" aria-label="Speed test ready">
-          <div className="flex w-full flex-col items-center px-4 text-center">
-            <p className="mb-3 text-sm text-app-secondary">{connectionStatus}</p>
-            {lastTestSummary && (
-              <p className="mb-5 text-xs text-app-muted">{lastTestSummary}</p>
+        <section key="ready" className="test-state-enter flex flex-1 items-center justify-center py-12" aria-label="Speed test ready">
+          <div className="flex w-full max-w-xl flex-col items-center px-4 text-center">
+            <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3.5 py-1.5 shadow-[0_0_0_1px_rgba(255,255,255,0.02)] backdrop-blur-md">
+              <span className="h-2.5 w-2.5 rounded-full bg-emerald-400 shadow-[0_0_16px_rgba(52,211,153,0.9)]" aria-hidden="true" />
+              <span className="text-[10px] font-medium uppercase tracking-[0.30em] text-app-secondary">Ready</span>
+            </div>
+
+            {connectionStatus && (
+              <div className="rounded-2xl border border-white/8 bg-white/[0.02] px-5 py-4 shadow-[0_18px_40px_-24px_rgba(15,118,110,0.8)] backdrop-blur-sm">
+                <p className="text-[11px] font-medium uppercase tracking-[0.34em] text-app-secondary">{connectionStatus}</p>
+              </div>
             )}
-            <div className="relative flex items-center justify-center">
-              <span className="start-button-halo pointer-events-none absolute -inset-6 rounded-full bg-app-accent/30 blur-2xl" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-2 rounded-full border border-app-accent/25" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-3 rounded-full border border-app-accent/40 start-button-ring" aria-hidden="true" />
-              <span className="pointer-events-none absolute -inset-5 rounded-full border border-app-accent/20 start-button-ring-delayed" aria-hidden="true" />
+            {lastTestSummary && (
+              <p className="mt-5 max-w-md text-sm text-app-muted">{lastTestSummary}</p>
+            )}
+
+            <div className="relative mt-12 flex items-center justify-center">
+              <span className="start-button-halo pointer-events-none absolute -inset-12 rounded-full bg-cyan-400/25 blur-3xl" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-5 rounded-full border border-cyan-400/30 bg-cyan-500/5" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-6 rounded-full border border-cyan-400/40 start-button-ring" aria-hidden="true" />
+              <span className="pointer-events-none absolute -inset-9 rounded-full border border-cyan-400/20 start-button-ring-delayed" aria-hidden="true" />
               <button
                 onClick={onStartTest}
                 disabled={isTesting}
                 aria-label="Start speed test"
                 aria-busy={isTesting}
-                className="start-cta group relative inline-flex items-center justify-center rounded-full bg-app-accent text-[#071421] shadow-md transition-all duration-200 hover:scale-[1.04] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
+                className="start-cta group relative inline-flex items-center justify-center rounded-full border border-white/25 bg-[linear-gradient(180deg,rgba(186,230,253,0.96),rgba(103,232,249,0.96)_30%,rgba(14,165,233,0.97)_100%)] text-[#071421] shadow-[0_24px_80px_-24px_rgba(34,211,238,0.95)] ring-1 ring-cyan-100/30 transition-all duration-250 hover:scale-[1.06] hover:shadow-[0_28px_90px_-22px_rgba(34,211,238,1)] active:scale-95 disabled:cursor-not-allowed disabled:opacity-80 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-app-accent"
               >
-                <span className="text-xl font-bold uppercase text-[#071421] sm:text-2xl">
+                <span className="absolute inset-[1px] rounded-full bg-[radial-gradient(circle_at_top,rgba(255,255,255,0.75),rgba(255,255,255,0.08)_34%,transparent_56%)]" aria-hidden="true" />
+                <span className="relative text-[2rem] font-black uppercase tracking-[0.08em] text-[#071421] sm:text-[2.4rem]">
                   Start
                 </span>
               </button>
             </div>
+
             {networkContext && (
-              <p className="mt-5 text-sm text-app-secondary">{networkContext}</p>
+              <p className="mt-8 max-w-lg text-sm text-app-secondary">{networkContext}</p>
             )}
           </div>
         </section>
@@ -327,7 +339,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           <div className="min-w-0 lg:col-span-2">
             <PhaseHud stage={stage} />
           </div>
-          <div className="min-w-0 lg:flex lg:flex-col lg:items-center">
+          <div className="min-w-0 flex flex-col items-center gap-5 lg:flex lg:flex-col lg:items-center">
             <ModernSpeedGauge
               value={currentSpeedMbps}
               phase={phase}
@@ -335,7 +347,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
               statusLabel={GAUGE_STAGE_LABELS[stage] || 'Preparing test'}
             />
 
-            <div className="mx-auto mt-2 w-full max-w-xl space-y-2">
+            <div className="mx-auto w-full max-w-xl space-y-2">
               <div className="flex items-center justify-between gap-4 text-sm">
                 <span className="text-app-secondary">{stageName}</span>
                 <span className="shrink-0 font-mono tabular-nums text-app-muted">{progressPercent}%</span>
@@ -397,31 +409,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
               </time>
             </div>
             <p className="max-w-2xl text-xs leading-5 text-app-secondary">{resultSummary}</p>
-            <div className="flex flex-wrap items-center gap-2 pt-1">
-              <button
-                onClick={onSaveAndClose}
-                className="min-h-11 rounded-lg bg-app-accent px-4 text-sm font-semibold text-[#071421] transition-colors hover:bg-app-accent-hover"
-              >
-                {canDiscardResult ? 'Save and close' : 'Close results'}
-              </button>
-              {canDiscardResult && (
-                <button
-                  onClick={onDiscardResults}
-                  className="min-h-11 rounded-lg border border-app-divider px-4 text-sm font-medium text-app-secondary transition-colors hover:bg-app-raised"
-                >
-                  Discard result
-                </button>
-              )}
-              <button
-                onClick={() => {
-                  if (canDiscardResult && !window.confirm('Discard this unsaved result and start a new test?')) return;
-                  onStartTest();
-                }}
-                className="min-h-11 rounded-lg border border-app-divider px-4 text-sm font-medium text-app-secondary transition-colors hover:bg-app-raised"
-              >
-                Test again
-              </button>
-            </div>
           </div>
 
           <div className="grid grid-cols-3 gap-x-3 gap-y-1 sm:gap-y-2" aria-label="Activity suitability summary">
@@ -571,6 +558,35 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
               <DetailedTestBreakdown report={report} />
             </div>
           </details>
+
+          <div className="flex flex-wrap justify-center gap-2.5 pt-1">
+            <button
+              onClick={onSaveAndClose}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyan-200/30 bg-gradient-to-b from-cyan-300 to-cyan-500 px-3.5 text-xs font-bold text-slate-950 shadow-[0_8px_24px_-12px_rgba(34,211,238,0.75)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-12px_rgba(34,211,238,0.9)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:translate-y-0 sm:px-4 sm:text-sm"
+            >
+              {canDiscardResult ? <Save className="h-4 w-4" aria-hidden="true" /> : <X className="h-4 w-4" aria-hidden="true" />}
+              <span>{canDiscardResult ? 'Save and close' : 'Close results'}</span>
+            </button>
+            {canDiscardResult && (
+              <button
+                onClick={onDiscardResults}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-rose-400/25 bg-rose-500/[0.04] px-3.5 text-xs font-semibold text-rose-200/90 transition-all hover:border-rose-400/45 hover:bg-rose-500/10 hover:text-rose-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rose-400 active:bg-rose-500/15 sm:px-4 sm:text-sm"
+              >
+                <Trash2 className="h-4 w-4" aria-hidden="true" />
+                <span>Discard result</span>
+              </button>
+            )}
+            <button
+              onClick={() => {
+                if (canDiscardResult && !window.confirm('Discard this unsaved result and start a new test?')) return;
+                onStartTest();
+              }}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/12 bg-white/[0.03] px-3.5 text-xs font-semibold text-app-primary transition-all hover:border-cyan-300/30 hover:bg-cyan-300/[0.06] hover:text-cyan-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:bg-cyan-300/10 sm:px-4 sm:text-sm"
+            >
+              <RotateCcw className="h-4 w-4" aria-hidden="true" />
+              <span>Test again</span>
+            </button>
+          </div>
 
           <div className="flex flex-wrap justify-center gap-2.5">
             <button

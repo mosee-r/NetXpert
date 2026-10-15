@@ -297,7 +297,7 @@
     width: min(78vw, 34dvh, 380px);
   }
   .start-cta {
-    width: clamp(10rem, 48vw, 13rem);
+    width: clamp(12rem, 56vw, 15.5rem);
     aspect-ratio: 1;
   }
   .start-button-halo {

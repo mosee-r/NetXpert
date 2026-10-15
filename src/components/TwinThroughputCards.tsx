@@ -152,7 +152,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       value: downloadMbps,
       samples: downloadSamples,
       Icon: ArrowDownToLine,
-      accentColor: '#06b6d4',
+      accentColor: activePhase === 'completed' ? '#34d399' : '#06b6d4',
     },
     {
       key: 'upload' as const,
@@ -160,33 +160,36 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       value: uploadMbps,
       samples: uploadSamples,
       Icon: ArrowUpFromLine,
-      accentColor: '#3b82f6',
+      accentColor: activePhase === 'completed' ? '#34d399' : '#3b82f6',
     },
   ];
 
   return (
     <div className={`mx-auto grid w-full max-w-3xl grid-cols-2 gap-2 sm:gap-4 ${compact ? 'my-1' : 'my-4'}`}>
       {cards.map(({ key, label, value, samples, Icon, accentColor }) => {
-        const isActive = activePhase === key;
-        const isWaiting = activePhase === 'idle'
-          || ((activePhase === 'download' || activePhase === 'upload') && !isActive && value === null);
+        const isCompleted = activePhase === 'completed';
+        const isActive = !isCompleted && activePhase === key;
+        const isWaiting = !isCompleted && (activePhase === 'idle'
+          || ((activePhase === 'download' || activePhase === 'upload') && !isActive && value === null));
         const hasValue = value !== null && Number.isFinite(value);
         return (
           <article
             key={key}
             className={`min-w-0 rounded-xl transition-all duration-300 glass-card glass-card-hover ${compact ? 'p-2.5 sm:p-3' : 'p-3.5 sm:p-4'} ${
               isActive
-                ? 'bg-app-raised shadow-md'
+                ? 'bg-app-raised shadow-[0_0_0_1px_rgba(6,182,212,0.12),0_12px_28px_-20px_rgba(6,182,212,0.8)]'
+                : isCompleted
+                ? 'border-app-divider bg-app-surface/60 shadow-sm'
                 : 'border-app-divider bg-app-surface/60'
             }`}
             aria-label={`${label} throughput`}
-            style={{ borderColor: isActive ? `${accentColor}CC` : undefined }}
+            style={{ borderColor: isActive ? `${accentColor}CC` : isCompleted ? 'rgba(148, 163, 184, 0.2)' : undefined }}
           >
             <div className="flex items-center">
               <div className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wider text-slate-300">
                 <div
-                  className="flex h-7 w-7 items-center justify-center rounded-lg bg-slate-800/80 border border-white/10"
-                  style={{ color: accentColor }}
+                  className="flex h-7 w-7 items-center justify-center rounded-lg border border-white/10 bg-slate-800/80"
+                  style={{ color: isCompleted ? '#34d399' : accentColor }}
                 >
                   <Icon className="h-4 w-4" />
                 </div>
@@ -197,14 +200,14 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
             <div className={`${compact ? 'mt-1.5' : 'mt-3'} mb-1 flex items-baseline gap-1.5`}>
               <span
                 className={`font-mono font-extrabold tabular-nums tracking-tight text-white ${compact ? 'text-2xl' : 'text-3xl'}`}
-                style={{ textShadow: hasValue ? `0 0 16px ${accentColor}40` : 'none' }}
+                style={{ textShadow: hasValue ? `0 0 16px ${isCompleted ? 'rgba(52,211,153,0.45)' : `${accentColor}40`}` : 'none' }}
               >
                 {hasValue ? value.toFixed(1) : '\u2014'}
               </span>
               <span className="font-mono text-xs font-medium text-slate-400">Mbps</span>
             </div>
 
-            <MiniSparkline samples={samples} isActive={isActive} isWaiting={isWaiting} label={label} accentColor={accentColor} compact={compact} />
+            <MiniSparkline samples={samples} isActive={isActive} isWaiting={isWaiting} label={label} accentColor={isCompleted ? '#34d399' : accentColor} compact={compact} />
           </article>
         );
       })}

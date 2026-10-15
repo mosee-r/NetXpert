@@ -159,7 +159,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
   }, [targetAngle, prefersReducedMotion]);
 
   return (
-    <div className="speed-gauge mx-auto my-2 select-none pt-7">
+    <div className="speed-gauge mx-auto my-2 select-none pt-10">
       <div className="relative flex items-center justify-center">
         <div
           className={`gauge-halo pointer-events-none absolute inset-[12%] rounded-full blur-2xl ${isRunning ? 'gauge-halo-running' : ''}`}
@@ -305,7 +305,7 @@ export const ModernSpeedGauge: React.FC<ModernSpeedGaugeProps> = ({
 
         {/* Floating Active Phase Badge */}
         {isRunning && (
-          <div className="absolute top-0 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-cyan-500/30 bg-slate-900/90 px-3 py-1 backdrop-blur-md shadow-lg shadow-cyan-950/50">
+          <div className="absolute -top-5 left-1/2 z-10 -translate-x-1/2 flex items-center gap-2 rounded-full border border-cyan-500/30 bg-slate-900/90 px-3 py-1 backdrop-blur-md shadow-lg shadow-cyan-950/50">
             <span className="h-2 w-2 rounded-full bg-cyan-400 animate-ping motion-reduce:animate-none" />
             <span className="text-[11px] font-semibold text-cyan-300 uppercase tracking-wider">
               {phaseLabel}

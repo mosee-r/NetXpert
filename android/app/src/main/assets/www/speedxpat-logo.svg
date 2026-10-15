@@ -17,7 +17,6 @@
       <stop offset="1" stop-color="#00f4e8" />
     </linearGradient>
   </defs>
-  <rect width="768" height="768" fill="#020b1e" />
   <path d="M314 183 384 78l70 105-70-39z" fill="url(#sweep)" />
   <path d="M349 165C274 222 202 299 146 396c73-93 147-167 223-220l-5-12z" fill="url(#sweep)" />
   <path d="M419 165c75 57 147 134 203 231-73-93-147-167-223-220l5-12z" fill="url(#sweep)" />
