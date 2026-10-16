@@ -103,6 +103,17 @@ android {
     }
 }
 
+val copyDebugApk = tasks.register<Copy>("copyDebugApk") {
+    dependsOn("assembleDebug")
+    from(layout.buildDirectory.file("outputs/apk/debug/app-debug.apk"))
+    into(layout.buildDirectory.dir("outputs/apk/named"))
+    rename { "SpeedXpat-debug.apk" }
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy(copyDebugApk)
+}
+
 tasks.matching { it.name == "packageRelease" }.configureEach {
     doFirst {
         if (!hasReleaseSigning) {
