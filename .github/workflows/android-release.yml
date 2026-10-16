@@ -63,4 +63,7 @@ jobs:
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" android/app/build/outputs/apk/release/app-release.apk --verify-tag --title "SpeedXpat $GITHUB_REF_NAME" --generate-notes
+        run: |
+          APK_PATH="android/app/build/outputs/apk/release/SpeedXpat-${GITHUB_REF_NAME}.apk"
+          cp android/app/build/outputs/apk/release/app-release.apk "$APK_PATH"
+          gh release create "$GITHUB_REF_NAME" "$APK_PATH" --verify-tag --title "SpeedXpat $GITHUB_REF_NAME" --generate-notes
