@@ -248,7 +248,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
     {
       label: 'DNS Resolution',
       val: raw.dnsTiming.durationMs !== null ? `${raw.dnsTiming.durationMs} ms` : '--',
-      detail: raw.dnsTiming.targetDomain || 'cloudflare.com',
+      detail: raw.dnsTiming.targetDomain || '1.1.1.1',
       method: raw.dnsTiming.method,
     },
     {

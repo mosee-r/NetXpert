@@ -9,7 +9,7 @@ import { DnsTimingResult, HttpTimingResult, TestStatus } from '../types/network'
 import { createRequestTimeout, isAndroidNativeApp } from './testEndpoints';
 
 export async function measureDnsTiming(
-  domain = 'cloudflare.com',
+  domain = '1.1.1.1',
   signal?: AbortSignal
 ): Promise<DnsTimingResult> {
   const limitations = [
@@ -49,7 +49,7 @@ export async function measureDnsTiming(
   // Fallback: DNS-over-HTTPS via Cloudflare DoH (IETF RFC 8484 JSON)
   try {
     const start = performance.now();
-    const dohUrl = `https://cloudflare-dns.com/dns-query?name=${encodeURIComponent(domain)}&type=A`;
+    const dohUrl = `https://1.1.1.1/dns-query?name=${encodeURIComponent(domain)}&type=A`;
     const requestTimeout = createRequestTimeout(signal, 5_000);
     let res: Response;
     try {

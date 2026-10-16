@@ -107,7 +107,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleReset = () => {
     const defaultEndpoints = getDefaultTestEndpoints();
     setPingTarget(defaultEndpoints.ping);
-    setDnsDomain('cloudflare.com');
+    setDnsDomain('1.1.1.1');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);
     setBenchmarkMode(true);

@@ -144,7 +144,7 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   } | null>(null);
 
   // Tool 5: Port & HTTPS Reachability Checker
-  const [reachTarget, setReachTarget] = useState('https://cloudflare.com');
+  const [reachTarget, setReachTarget] = useState('https://1.1.1.1');
   const [isCheckingReach, setIsCheckingReach] = useState(false);
   const [reachResult, setReachResult] = useState<{
     status: number | string;

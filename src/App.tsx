@@ -60,7 +60,7 @@ function validateTestSettings(
       return 'DNS target must be a domain name without a path, port, or query.';
     }
   } catch {
-    return 'DNS target is invalid. Enter a domain name such as cloudflare.com.';
+    return 'DNS target is invalid. Enter a domain name such as 1.1.1.1.';
   }
 
   return null;
@@ -83,7 +83,7 @@ export default function App() {
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
-  const [dnsDomain, setDnsDomain] = useState('cloudflare.com');
+  const [dnsDomain, setDnsDomain] = useState('1.1.1.1');
   const [maxDownloadMb, setMaxDownloadMb] = useState(8);
   const [maxUploadMb, setMaxUploadMb] = useState(4);
   const [benchmarkMode, setBenchmarkMode] = useState(true);

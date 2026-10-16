@@ -13,6 +13,7 @@ import {
   isAndroidNativeApp,
 } from './testEndpoints';
 import { locateNearestMlabServer } from '../services/mlabService';
+import { getIPInfoFromRadar, CloudflareRadarConfig } from '../services/cloudflareRadarService';
 
 interface NetworkInformationNavigator extends Navigator {
   connection?: {
@@ -115,6 +116,62 @@ export async function detectNetworkInfo(
     label?: string;
   } | undefined;
 
+  // 0. Primary lookup: Cloudflare Trace (fastest, no auth, basic IP + country + colo)
+  if (!isAndroidNativeApp()) {
+    try {
+      const requestTimeout = createRequestTimeout(undefined, 3_000);
+      let traceRes: Response | null;
+      try {
+        traceRes = await fetch('/api/network/cloudflare-trace', {
+          cache: 'no-store',
+          signal: requestTimeout.signal,
+        }).catch(() => null);
+      } finally {
+        requestTimeout.dispose();
+      }
+
+      if (traceRes && traceRes.ok) {
+        const data = await traceRes.json();
+        if (data.ok) {
+          ipAddress = data.ip;
+          locationCountry = data.country;
+          // Still need city, region, ISP, ASN from ipinfo.io or Radar
+        }
+      }
+    } catch {
+      // Continue to Radar or ipinfo.io
+    }
+  }
+
+  // 0.5. Optional: Cloudflare Radar lookup (if API token available, provides detailed info)
+  if (!isAndroidNativeApp() && ipAddress && (!locationCity || !ispName || !asn)) {
+    try {
+      const radarConfig: CloudflareRadarConfig = {
+        apiToken: import.meta.env.CLOUDFLARE_RADAR_API_TOKEN || undefined,
+      };
+
+      // Only call Radar if we have a token
+      if (radarConfig.apiToken) {
+        const requestTimeout = createRequestTimeout(undefined, 5_000);
+        try {
+          const radarData = await getIPInfoFromRadar(ipAddress, radarConfig);
+          if (radarData.ok) {
+            if (!locationCity) locationCity = radarData.city;
+            if (!locationRegion) locationRegion = radarData.region;
+            if (!locationCountry) locationCountry = radarData.country;
+            if (!ispName) ispName = radarData.isp;
+            if (!asn) asn = radarData.asn;
+            if (!asnOrg) asnOrg = radarData.org;
+          }
+        } finally {
+          requestTimeout.dispose();
+        }
+      }
+    } catch {
+      // Continue to ipinfo.io
+    }
+  }
+
   // 1. Primary lookup: direct ipinfo.io lookup (resolves true client edge IP & ASN)
   try {
     const requestTimeout = createRequestTimeout(undefined, 4_000);
@@ -131,7 +188,7 @@ export async function detectNetworkInfo(
 
     if (ipinfoRes && ipinfoRes.ok) {
       const data = await ipinfoRes.json();
-      ipAddress = data.ip;
+      if (!ipAddress) ipAddress = data.ip;
       const orgStr: string = data.org || '';
       asnOrg = orgStr;
 
@@ -148,9 +205,9 @@ export async function detectNetworkInfo(
         ispName = orgStr || undefined;
       }
 
-      locationCity = data.city;
-      locationRegion = data.region;
-      locationCountry = data.country;
+      if (!locationCity) locationCity = data.city;
+      if (!locationRegion) locationRegion = data.region;
+      if (!locationCountry) locationCountry = data.country;
     }
   } catch {
     // Continue to server fallback

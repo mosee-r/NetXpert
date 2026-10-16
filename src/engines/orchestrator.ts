@@ -73,7 +73,7 @@ export class AssessmentOrchestrator {
     const pingTarget = options.pingTarget || defaultEndpoints.ping;
     const downloadTarget = defaultEndpoints.download;
     const uploadTarget = defaultEndpoints.upload;
-    const dnsDomain = options.dnsDomain || 'cloudflare.com';
+    const dnsDomain = options.dnsDomain || '1.1.1.1';
     const useMlab = options.useMlab !== false;
 
     const notify = (

@@ -70,7 +70,7 @@ app.post('/api/speedtest/upload', (req, res) => {
 
 app.get('/api/dns/lookup', async (req, res) => {
   res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
-  const domain = String(req.query.domain || 'cloudflare.com');
+  const domain = String(req.query.domain || '1.1.1.1');
 
   const start = process.hrtime.bigint();
   try {
@@ -197,4 +197,45 @@ app.get('/api/network/isp', async (_req, res) => {
   }
 
   res.status(502).json({ ok: false, error: 'ISP lookup is temporarily unavailable.' });
+});
+app.get('/api/network/cloudflare-trace', async (_req, res) => {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.setHeader('Access-Control-Allow-Origin', '*');
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 3_000);
+
+  try {
+    const traceRes = await fetch('https://speed.cloudflare.com/cdn-cgi/trace', {
+      headers: { Accept: 'text/plain' },
+      signal: controller.signal,
+    });
+
+    if (traceRes.ok) {
+      const traceText = await traceRes.text();
+      const traceData: Record<string, string> = {};
+
+      traceText.split('\n').forEach((line) => {
+        const [key, value] = line.split('=');
+        if (key && value) traceData[key] = value;
+      });
+
+      return res.json({
+        ok: true,
+        ip: traceData.ip || null,
+        country: traceData.loc || null,
+        colo: traceData.colo || null,
+        warp: traceData.warp === 'on',
+        gateway: traceData.gateway === 'on',
+        timestamp: traceData.ts ? parseFloat(traceData.ts) : null,
+        source: 'Cloudflare Trace',
+      });
+    }
+  } catch {
+    // Fall through to error
+  } finally {
+    clearTimeout(timeoutId);
+  }
+
+  return res.status(502).json({ ok: false, error: 'Cloudflare trace unavailable' });
 });
