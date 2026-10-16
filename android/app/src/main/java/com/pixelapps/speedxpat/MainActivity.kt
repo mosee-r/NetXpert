@@ -162,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = SpeedXpatWebViewClient(this)
-        webView.loadUrl("https://appassets.androidplatform.net/index.html")
+        webView.loadUrl("file:///android_asset/www/index.html")
     }
 
     override fun onResume() {
@@ -652,7 +652,7 @@ private class SpeedXpatWebViewClient(
 
     override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
         val uri = request.url
-        return uri.scheme != "https" || uri.host != "appassets.androidplatform.net"
+        return uri.scheme != "https" && uri.scheme != "file" && uri.scheme != "assets"
     }
 
     private fun openAsset(path: String): WebResourceResponse? {
