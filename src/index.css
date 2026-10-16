@@ -304,7 +304,6 @@
     .speed-gauge-running {
       width: min(72vw, 27dvh, 320px);
       margin-block: 0;
-      padding-top: 1.25rem;
     }
     .speed-test-home:not(.speed-test-home-ready) {
       padding-bottom: calc(64px + env(safe-area-inset-bottom));
