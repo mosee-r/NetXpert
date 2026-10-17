@@ -198,6 +198,9 @@ export interface DeviceNetworkInfo {
     longitude?: number;
   };
   wifiSsid?: string;
+  wifiBssid?: string;
+  localIpAddress?: string;
+  gatewayIpAddress?: string;
   wifiSignalDbm?: number;
   wifiFrequencyMhz?: number;
   cellularGeneration?: string; // "4G/LTE" | "5G"

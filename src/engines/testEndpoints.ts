@@ -167,6 +167,11 @@ const CLOUDFLARE_SPEED_SERVERS: SpeedTestServer[] = [
 
 export interface AndroidNativeBridge {
   getWifiSsid(): string;
+  getWifiBssid?(): string;
+  getLocalIpAddress?(): string;
+  getGatewayAddress?(): string;
+  getWifiSignalDbm?(): number;
+  getWifiFrequencyMhz?(): number;
   getNetworkType(): string;
   hasValidatedInternet?(): boolean;
   hasWifiNamePermission(): boolean;

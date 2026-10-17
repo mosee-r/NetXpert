@@ -281,6 +281,10 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     ? XCircle
     : HelpCircle;
   const [showPublicIp, setShowPublicIp] = useState(false);
+  const [reportView, setReportView] = useState<'simple' | 'full'>('simple');
+  const quickRecommendations = report?.activities
+    .filter((activity) => activity.rating === 'poor' || activity.rating === 'fair')
+    .slice(0, 3) ?? [];
   const idleLatency = report?.rawMeasurements.loadedLatency.baselineLatencyMs
     ?? report?.rawMeasurements.idleLatency.medianMs
     ?? null;
@@ -586,62 +590,127 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </button>
           )}
 
-          {/* Multi-size test results */}
-          {report.rawMeasurements.downloadThroughput.length > 1 && (
-            <details className="group border-b border-app-divider py-3">
-              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
-                <span>Multi-size Test Results</span>
-                <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
-              </summary>
-              <div className="space-y-4 pt-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Download (Multiple Sizes)</h4>
-                    {report.rawMeasurements.downloadThroughput.map((result, index) => (
-                      <div key={`dl-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
-                        <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
-                        <div className="text-sm font-mono">
-                          <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
-                          <span className="text-xs text-app-muted ml-1">Mbps</span>
-                        </div>
-                        {result.percentile90 && (
-                          <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                  <div className="space-y-2">
-                    <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Upload (Multiple Sizes)</h4>
-                    {report.rawMeasurements.uploadThroughput.map((result, index) => (
-                      <div key={`ul-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
-                        <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
-                        <div className="text-sm font-mono">
-                          <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
-                          <span className="text-xs text-app-muted ml-1">Mbps</span>
-                        </div>
-                        {result.percentile90 && (
-                          <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              onClick={() => setReportView('simple')}
+              className={`report-toggle inline-flex min-h-10 items-center justify-center rounded-full px-3 text-xs font-semibold transition-all ${
+                reportView === 'simple'
+                  ? 'report-toggle-active'
+                  : 'border-app-divider bg-app-surface/70 text-app-secondary hover:text-app-primary'
+              }`}
+            >
+              Simple report
+            </button>
+            <button
+              type="button"
+              onClick={() => setReportView('full')}
+              className={`report-toggle inline-flex min-h-10 items-center justify-center rounded-full px-3 text-xs font-semibold transition-all ${
+                reportView === 'full'
+                  ? 'report-toggle-active'
+                  : 'border-app-divider bg-app-surface/70 text-app-secondary hover:text-app-primary'
+              }`}
+            >
+              Full report
+            </button>
+          </div>
+
+          {reportView === 'simple' ? (
+            <div className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="metric-card ai-glow rounded-2xl p-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Download</div>
+                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.downloadMbps === null ? '—' : `${metrics.downloadMbps.toFixed(1)} Mbps`}</div>
+                </div>
+                <div className="metric-card ai-glow rounded-2xl p-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Upload</div>
+                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.uploadMbps === null ? '—' : `${metrics.uploadMbps.toFixed(1)} Mbps`}</div>
+                </div>
+                <div className="metric-card ai-glow rounded-2xl p-3">
+                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Ping</div>
+                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.idleLatencyMs === null ? '—' : `${Math.round(metrics.idleLatencyMs)} ms`}</div>
                 </div>
               </div>
-            </details>
+
+              <div className="result-summary-card ai-glow rounded-2xl p-4">
+                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-app-muted">Quick summary</div>
+                <p className="text-sm leading-6 text-app-secondary">{resultSummary}</p>
+              </div>
+
+              {quickRecommendations.length > 0 && (
+                <div className="result-summary-card ai-glow rounded-2xl p-4">
+                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-app-muted">Recommended next steps</div>
+                  <ul className="space-y-2 text-sm text-app-secondary">
+                    {quickRecommendations.map((item) => (
+                      <li key={item.activityId} className="flex gap-2">
+                        <span aria-hidden="true" className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-400" />
+                        <span>{item.summary}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Multi-size test results */}
+              {report.rawMeasurements.downloadThroughput.length > 1 && (
+                <details className="group border-b border-app-divider py-3">
+                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+                    <span>Multi-size Test Results</span>
+                    <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
+                  </summary>
+                  <div className="space-y-4 pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Download (Multiple Sizes)</h4>
+                        {report.rawMeasurements.downloadThroughput.map((result, index) => (
+                          <div key={`dl-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
+                            <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
+                            <div className="text-sm font-mono">
+                              <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
+                              <span className="text-xs text-app-muted ml-1">Mbps</span>
+                            </div>
+                            {result.percentile90 && (
+                              <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                      <div className="space-y-2">
+                        <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Upload (Multiple Sizes)</h4>
+                        {report.rawMeasurements.uploadThroughput.map((result, index) => (
+                          <div key={`ul-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
+                            <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
+                            <div className="text-sm font-mono">
+                              <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
+                              <span className="text-xs text-app-muted ml-1">Mbps</span>
+                            </div>
+                            {result.percentile90 && (
+                              <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                </details>
+              )}
+
+              <details className="group border-b border-app-divider py-3">
+                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+                  <span>Advanced details</span>
+                  <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
+                </summary>
+                <div className="space-y-5 pt-4">
+                  <WorkloadSuitability activities={report.activities} />
+                  <DetailedTestBreakdown report={report} />
+                </div>
+              </details>
+            </>
           )}
 
-          <details className="group border-b border-app-divider py-3">
-            <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
-              <span>Advanced details</span>
-              <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
-            </summary>
-            <div className="space-y-5 pt-4">
-              <WorkloadSuitability activities={report.activities} />
-              <DetailedTestBreakdown report={report} />
-            </div>
-          </details>
-
-          <div className="flex flex-wrap justify-center gap-2.5 pt-1">
+          <div className="results-actions pt-1">
             <button
               onClick={onSaveAndClose}
               className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-cyan-200/30 bg-gradient-to-b from-cyan-300 to-cyan-500 px-3.5 text-xs font-bold text-slate-950 shadow-[0_8px_24px_-12px_rgba(34,211,238,0.75)] transition-all hover:-translate-y-0.5 hover:shadow-[0_12px_28px_-12px_rgba(34,211,238,0.9)] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 active:translate-y-0 sm:px-4 sm:text-sm"
@@ -660,7 +729,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             )}
           </div>
 
-          <div className="flex flex-wrap justify-center gap-2.5">
+          <div className="results-actions">
             <button
               onClick={() => {
                 try {

@@ -45,11 +45,14 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
   const [refreshError, setRefreshError] = useState(false);
   const isAndroidApp = isAndroidNativeApp();
 
-  const isWifi = networkInfo?.networkType === 'wifi' || networkInfo?.networkType === 'unknown';
+  const isWifi = networkInfo?.networkType === 'wifi';
   const isCellular = networkInfo?.networkType === 'cellular';
+  const browserLimited = !isAndroidApp && Boolean(networkInfo && networkInfo.networkType === 'unknown');
   const hasNetwork = Boolean(networkInfo && networkInfo.networkType !== 'unknown');
   const connectionName = !networkInfo
     ? 'Checking connection'
+    : networkInfo.networkType === 'unknown'
+    ? (isAndroidApp ? 'Connection unavailable' : 'Browser-limited connection')
     : networkInfo.networkType === 'wifi'
     ? networkInfo.wifiSsid || (isAndroidApp ? 'Wi-Fi name unavailable' : 'Wi-Fi network')
     : networkInfo.networkType === 'cellular'
@@ -61,6 +64,8 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
     : isAndroidApp ? 'No network connection' : 'Internet unavailable';
   const connectionStatus = !networkInfo
     ? 'Checking connection'
+    : networkInfo.networkType === 'unknown'
+    ? (isAndroidApp ? 'Unknown connection' : 'Browser-limited view')
     : hasNetwork
     ? networkInfo.online ? 'Internet available' : 'Connected · No internet'
     : networkInfo.online ? 'Internet available' : isAndroidApp ? 'Not connected' : 'Internet unavailable';
@@ -142,8 +147,48 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
 
       {!isAndroidApp && (
         <p role="note" className="rounded-lg border border-app-divider bg-app-surface px-3 py-2 text-xs leading-5 text-app-secondary">
-          Browser privacy limits access to Wi-Fi/cellular radio details, local IP, router, and DNS resolver data. Missing values are unavailable to this browser, not evidence of a network fault.
+          Browser privacy limits access to Wi‑Fi/cellular radio details, local IP, router, and DNS resolver data. Missing values are unavailable to this browser, not evidence of a network fault.
         </p>
+      )}
+
+      {browserLimited && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          Browser-limited network view: this environment cannot expose SSID, BSSID, gateway, or low-level radio info. Use the Android app for full local-network diagnostics.
+        </div>
+      )}
+
+      {(isAndroidApp || networkInfo) && (
+        <section className="rounded-2xl border border-white/10 bg-[#0E1A2E] p-4 shadow-xl">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2 text-cyan-300">
+              <Cpu className="w-4 h-4" />
+              <h3 className="text-sm font-bold uppercase tracking-wider text-white">Debug metadata</h3>
+            </div>
+            <span className="text-[10px] uppercase tracking-wider text-slate-400">
+              {isAndroidApp ? 'native' : 'browser'}
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+            {[
+              ['Connection type', networkInfo?.networkType || 'unknown'],
+              ['Online', networkInfo?.online ? 'true' : 'false'],
+              ['SSID', networkInfo?.wifiSsid || 'unavailable'],
+              ['BSSID', networkInfo?.wifiBssid || 'unavailable'],
+              ['Signal', networkInfo?.wifiSignalDbm !== undefined ? `${networkInfo.wifiSignalDbm} dBm` : 'unavailable'],
+              ['Frequency', networkInfo?.wifiFrequencyMhz !== undefined ? `${networkInfo.wifiFrequencyMhz} MHz` : 'unavailable'],
+              ['Local IP', networkInfo?.localIpAddress || 'unavailable'],
+              ['Gateway', networkInfo?.gatewayIpAddress || 'unavailable'],
+              ['Public IP', networkInfo?.ipAddress || 'unavailable'],
+              ['ISP', networkInfo?.ispName || 'unavailable'],
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/5 bg-slate-950/40 p-2.5">
+                <div className="text-[10px] uppercase tracking-wider text-slate-400">{label}</div>
+                <div className="mt-1 break-all font-mono text-xs text-slate-100">{value}</div>
+              </div>
+            ))}
+          </div>
+        </section>
       )}
 
       <section
@@ -419,8 +464,9 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         {/* IP Addresses & Gateway Rows with copy */}
         <div className="space-y-2 pt-2 border-t border-white/5 text-xs">
           {[
-            { key: 'internal_ip', label: 'Local Device IP', val: isAndroidApp ? unavailable : notExposedInBrowser },
-            { key: 'gateway_ip', label: 'Default Router Gateway', val: isAndroidApp ? unavailable : notExposedInBrowser },
+            { key: 'internal_ip', label: 'Local Device IP', val: networkInfo?.localIpAddress || (isAndroidApp ? unavailable : notExposedInBrowser) },
+            { key: 'gateway_ip', label: 'Default Router Gateway', val: networkInfo?.gatewayIpAddress || (isAndroidApp ? unavailable : notExposedInBrowser) },
+            { key: 'wifi_bssid', label: 'Wi‑Fi BSSID / Access Point', val: networkInfo?.wifiBssid || (isAndroidApp ? unavailable : notExposedInBrowser) },
             { key: 'public_ip', label: 'Public IP', val: networkInfo?.ipAddress || unavailable },
             { key: 'dns_resolvers', label: 'DNS Resolvers', val: isAndroidApp ? unavailable : notExposedInBrowser },
           ].map((row) => (

@@ -462,7 +462,7 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-app-canvas text-app-primary flex flex-col font-sans selection:bg-app-accent selection:text-white">
+    <div className="app-shell min-h-screen text-app-primary flex flex-col font-sans selection:bg-app-accent selection:text-white">
       {/* 0. Initial Animated Splash Screen Overlay */}
       {isSplashActive && (
         <div

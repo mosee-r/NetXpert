@@ -488,6 +488,31 @@ class SpeedXpatNativeInterface(private val context: Context) {
     }
 
     @JavascriptInterface
+    fun getWifiBssid(): String {
+        return fetchWifiBssid(context)
+    }
+
+    @JavascriptInterface
+    fun getLocalIpAddress(): String {
+        return fetchLocalIpAddress(context)
+    }
+
+    @JavascriptInterface
+    fun getGatewayAddress(): String {
+        return fetchGatewayAddress(context)
+    }
+
+    @JavascriptInterface
+    fun getWifiSignalDbm(): Double {
+        return fetchWifiSignalDbm(context).toDouble()
+    }
+
+    @JavascriptInterface
+    fun getWifiFrequencyMhz(): Double {
+        return fetchWifiFrequencyMhz(context).toDouble()
+    }
+
+    @JavascriptInterface
     fun getNetworkType(): String {
         return fetchNetworkType(context)
     }
@@ -593,6 +618,38 @@ class SpeedXpatNativeInterface(private val context: Context) {
                 .mapNotNull { it?.trim('"')?.trim() }
                 .firstOrNull { it.isNotEmpty() && it != "<unknown ssid>" && it != "0x" }
                 .orEmpty()
+        }
+
+        fun fetchWifiBssid(context: Context): String {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val wifiInfo = wifiManager?.connectionInfo ?: return ""
+            return wifiInfo.bssid.orEmpty()
+        }
+
+        fun fetchLocalIpAddress(context: Context): String {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val ipAddress = wifiManager?.dhcpInfo?.ipAddress ?: 0
+            if (ipAddress == 0) return ""
+            return android.text.format.Formatter.formatIpAddress(ipAddress)
+        }
+
+        fun fetchGatewayAddress(context: Context): String {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val gateway = wifiManager?.dhcpInfo?.gateway ?: 0
+            if (gateway == 0) return ""
+            return android.text.format.Formatter.formatIpAddress(gateway)
+        }
+
+        fun fetchWifiSignalDbm(context: Context): Int {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val wifiInfo = wifiManager?.connectionInfo ?: return 0
+            return wifiInfo.rssi
+        }
+
+        fun fetchWifiFrequencyMhz(context: Context): Int {
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
+            val wifiInfo = wifiManager?.connectionInfo ?: return 0
+            return wifiInfo.frequency
         }
 
         fun fetchNetworkType(context: Context): String {

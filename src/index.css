@@ -161,6 +161,86 @@
     color: var(--app-primary);
     font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     overflow-x: hidden;
+    background-image:
+      radial-gradient(circle at top, rgba(6, 182, 212, 0.12), transparent 28%),
+      radial-gradient(circle at 80% 20%, rgba(59, 130, 246, 0.08), transparent 24%),
+      linear-gradient(180deg, var(--app-canvas) 0%, #08111d 100%);
+  }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background-image: linear-gradient(rgba(148, 163, 184, 0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.025) 1px, transparent 1px);
+    background-size: 26px 26px;
+    mask-image: radial-gradient(circle at center, black 42%, transparent 100%);
+  }
+
+  .app-shell {
+    background:
+      radial-gradient(circle at top, rgba(14, 165, 233, 0.12), transparent 25%),
+      radial-gradient(circle at bottom right, rgba(14, 165, 233, 0.08), transparent 28%),
+      var(--app-canvas);
+  }
+
+  .glass-panel {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(9, 15, 28, 0.88));
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.06), 0 18px 42px -28px rgba(14, 165, 233, 0.7);
+    backdrop-filter: blur(10px);
+  }
+
+  .ai-glow {
+    box-shadow: 0 0 0 1px rgba(103, 232, 249, 0.3), 0 0 22px rgba(103, 232, 249, 0.2), 0 18px 42px -24px rgba(14, 165, 233, 0.7);
+  }
+
+  .metric-card,
+  .result-summary-card,
+  .report-toggle {
+    background: linear-gradient(180deg, rgba(15, 23, 42, 0.9), rgba(9, 15, 28, 0.88));
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    box-shadow: 0 0 0 1px rgba(14, 165, 233, 0.04), 0 18px 42px -28px rgba(14, 165, 233, 0.5);
+    backdrop-filter: blur(10px);
+  }
+
+  .report-toggle-active {
+    border-color: rgba(125, 211, 252, 0.7);
+    background: linear-gradient(180deg, rgba(34, 211, 238, 0.12), rgba(14, 165, 233, 0.18));
+    color: #e0f2fe;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 0 0 1px rgba(103, 232, 249, 0.12), 0 18px 30px -24px rgba(34, 211, 238, 0.8);
+  }
+
+  .speed-test-home {
+    padding-inline: 0.25rem;
+  }
+
+  .results-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 0.625rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .speed-test-home {
+    padding-inline: 0.125rem;
+  }
+
+  .metric-card,
+  .result-summary-card,
+  .report-toggle {
+    border-radius: 1rem;
+  }
+
+  .report-toggle {
+    min-height: 2.25rem;
+    padding-inline: 0.75rem;
+  }
+
+  .results-actions {
+    gap: 0.5rem;
   }
 }
 

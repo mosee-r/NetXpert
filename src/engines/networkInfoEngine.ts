@@ -69,6 +69,11 @@ export async function detectNetworkInfo(
   let rttMs: number | undefined = undefined;
   let saveData: boolean | undefined = undefined;
   let wifiSsid: string | undefined = undefined;
+  let wifiBssid: string | undefined = undefined;
+  let localIpAddress: string | undefined = undefined;
+  let gatewayIpAddress: string | undefined = undefined;
+  let wifiSignalDbm: number | undefined = undefined;
+  let wifiFrequencyMhz: number | undefined = undefined;
 
   const limitations: string[] = [
     'Cellular radio metrics (RSRP, RSRQ, SINR, Cell ID) and low-level Wi-Fi BSSID/RSSI require native Android Telephony & WifiManager permissions not exposed in web sandboxes.',
@@ -82,9 +87,37 @@ export async function detectNetworkInfo(
         wifiSsid = ssid;
         networkType = 'wifi';
       }
+
+      const bssid = androidNative.getWifiBssid?.();
+      if (bssid) {
+        wifiBssid = bssid;
+      }
+
+      const localIp = androidNative.getLocalIpAddress?.();
+      if (localIp) {
+        localIpAddress = localIp;
+      }
+
+      const gateway = androidNative.getGatewayAddress?.();
+      if (gateway) {
+        gatewayIpAddress = gateway;
+      }
+
       const nType = androidNative.getNetworkType();
       if (nType && nType !== 'unknown') {
         networkType = nType as NetworkType;
+      }
+
+      if (networkType === 'wifi') {
+        const signal = androidNative.getWifiSignalDbm?.();
+        if (typeof signal === 'number' && Number.isFinite(signal)) {
+          wifiSignalDbm = signal;
+        }
+
+        const frequency = androidNative.getWifiFrequencyMhz?.();
+        if (typeof frequency === 'number' && Number.isFinite(frequency)) {
+          wifiFrequencyMhz = frequency;
+        }
       }
     }
   } catch {}
@@ -324,6 +357,11 @@ export async function detectNetworkInfo(
     locationCountry,
     nearestServer,
     wifiSsid,
+    wifiBssid,
+    localIpAddress,
+    gatewayIpAddress,
+    wifiSignalDbm,
+    wifiFrequencyMhz,
     limitations,
   };
 }
