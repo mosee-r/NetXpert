@@ -24,6 +24,7 @@ import {
   locateNearestMlabServer,
   measureMlabThroughput,
 } from '../services/mlabService';
+import { DEFAULT_DNS_DOMAIN, DEFAULT_SERVER_ID } from '../config/defaults';
 
 export type AssessmentStage =
   | 'idle'
@@ -77,14 +78,14 @@ export class AssessmentOrchestrator {
     const signal = this.abortController.signal;
 
     // Get server info
-    const serverId = options.serverId || 'jnb'; // Default to Johannesburg
-    const server = getServerById(serverId) || getServerById('jnb')!;
+    const serverId = options.serverId || DEFAULT_SERVER_ID;
+    const server = getServerById(serverId) || getServerById(DEFAULT_SERVER_ID)!;
     const testEndpoints = getTestEndpointsForServer(serverId);
-    
+
     const pingTarget = options.pingTarget || testEndpoints.ping;
     const downloadTarget = testEndpoints.download;
     const uploadTarget = testEndpoints.upload;
-    const dnsDomain = options.dnsDomain || '1.1.1.1';
+    const dnsDomain = options.dnsDomain || DEFAULT_DNS_DOMAIN;
     const useMlab = options.useMlab !== false;
 
     const notify = (

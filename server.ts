@@ -10,8 +10,8 @@ import express from 'express';
 import path from 'path';
 import 'dotenv/config';
 import { app } from './api';
+import { DEFAULT_PORT } from './src/config/defaults';
 
-const DEFAULT_PORT = Number(process.env.PORT || 3000);
 const httpServer = createHttpServer(app);
 
 function listenOnAvailablePort(port: number): Promise<number> {

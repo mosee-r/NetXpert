@@ -4,7 +4,7 @@ import express from "express";
 import path from "path";
 import "dotenv/config";
 import { app } from "./api";
-const DEFAULT_PORT = Number(process.env.PORT || 3e3);
+import { DEFAULT_PORT } from "./src/config/defaults";
 const httpServer = createHttpServer(app);
 function listenOnAvailablePort(port) {
   return new Promise((resolve, reject) => {

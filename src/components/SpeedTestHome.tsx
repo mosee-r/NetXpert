@@ -282,9 +282,17 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     : HelpCircle;
   const [showPublicIp, setShowPublicIp] = useState(false);
   const [reportView, setReportView] = useState<'simple' | 'full'>('simple');
-  const quickRecommendations = report?.activities
-    .filter((activity) => activity.rating === 'poor' || activity.rating === 'fair')
-    .slice(0, 3) ?? [];
+  const [expandedSections, setExpandedSections] = useState({
+    multiSize: false,
+    advanced: false,
+  });
+  const quickRecommendations = report
+    ? [...new Set(
+        report.activities
+          .filter((activity) => activity.rating === 'poor' || activity.rating === 'fair')
+          .flatMap((activity) => activity.recommendations)
+      )].slice(0, 3)
+    : [];
   const idleLatency = report?.rawMeasurements.loadedLatency.baselineLatencyMs
     ?? report?.rawMeasurements.idleLatency.medianMs
     ?? null;
@@ -641,10 +649,10 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                 <div className="result-summary-card ai-glow rounded-2xl p-4">
                   <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-app-muted">Recommended next steps</div>
                   <ul className="space-y-2 text-sm text-app-secondary">
-                    {quickRecommendations.map((item) => (
-                      <li key={item.activityId} className="flex gap-2">
+                    {quickRecommendations.map((item, index) => (
+                      <li key={`${item}-${index}`} className="flex gap-2">
                         <span aria-hidden="true" className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                        <span>{item.summary}</span>
+                        <span>{item}</span>
                       </li>
                     ))}
                   </ul>
@@ -653,60 +661,26 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </div>
           ) : (
             <>
-              {/* Multi-size test results */}
-              {report.rawMeasurements.downloadThroughput.length > 1 && (
-                <details className="group border-b border-app-divider py-3">
-                  <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
-                    <span>Multi-size Test Results</span>
-                    <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
-                  </summary>
-                  <div className="space-y-4 pt-4">
-                    <div className="grid grid-cols-2 gap-4">
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Download (Multiple Sizes)</h4>
-                        {report.rawMeasurements.downloadThroughput.map((result, index) => (
-                          <div key={`dl-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
-                            <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
-                            <div className="text-sm font-mono">
-                              <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
-                              <span className="text-xs text-app-muted ml-1">Mbps</span>
-                            </div>
-                            {result.percentile90 && (
-                              <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      <div className="space-y-2">
-                        <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Upload (Multiple Sizes)</h4>
-                        {report.rawMeasurements.uploadThroughput.map((result, index) => (
-                          <div key={`ul-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
-                            <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
-                            <div className="text-sm font-mono">
-                              <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
-                              <span className="text-xs text-app-muted ml-1">Mbps</span>
-                            </div>
-                            {result.percentile90 && (
-                              <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </details>
-              )}
-
-              <details className="group border-b border-app-divider py-3">
-                <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+              <div className="border-b border-app-divider py-3">
+                <button
+                  type="button"
+                  onClick={() => setExpandedSections((current) => ({ ...current, advanced: !current.advanced }))}
+                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 text-left text-sm font-medium text-app-secondary outline-none transition-colors hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent"
+                  aria-expanded={expandedSections.advanced}
+                >
                   <span>Advanced details</span>
-                  <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
-                </summary>
-                <div className="space-y-5 pt-4">
-                  <WorkloadSuitability activities={report.activities} />
-                  <DetailedTestBreakdown report={report} />
-                </div>
-              </details>
+                  <span aria-hidden="true" className={`text-lg text-app-accent transition-transform ${expandedSections.advanced ? 'rotate-180' : ''}`}>
+                    ▾
+                  </span>
+                </button>
+
+                {expandedSections.advanced && (
+                  <div className="space-y-5 pt-4">
+                    <WorkloadSuitability activities={report.activities} />
+                    <DetailedTestBreakdown report={report} />
+                  </div>
+                )}
+              </div>
             </>
           )}
 

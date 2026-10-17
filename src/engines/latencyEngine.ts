@@ -8,6 +8,31 @@
 
 import { LatencySummary, LatencySample, TestStatus } from '../types/network';
 
+export function calculateJitterMs(latenciesMs: number[]): number {
+  if (!Array.isArray(latenciesMs) || latenciesMs.length < 2) {
+    return 0;
+  }
+
+  const finiteValues = latenciesMs.filter((value) => Number.isFinite(value) && value >= 0);
+  if (finiteValues.length < 2) {
+    return 0;
+  }
+
+  const sorted = [...finiteValues].sort((a, b) => a - b);
+  const median =
+    sorted.length % 2 === 0
+      ? (sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2
+      : sorted[Math.floor(sorted.length / 2)];
+
+  const absoluteDeviations = sorted.map((value) => Math.abs(value - median));
+  const deviationMedian =
+    absoluteDeviations.length % 2 === 0
+      ? (absoluteDeviations[absoluteDeviations.length / 2 - 1] + absoluteDeviations[absoluteDeviations.length / 2]) / 2
+      : absoluteDeviations[Math.floor(absoluteDeviations.length / 2)];
+
+  return Math.round(deviationMedian);
+}
+
 export interface LatencyProbeOptions {
   targetUrl: string;
   sampleCount?: number;
@@ -143,14 +168,12 @@ export async function measureLatency(
       ? sorted[Math.floor(sorted.length / 2)]
       : Math.round((sorted[sorted.length / 2 - 1] + sorted[sorted.length / 2]) / 2);
 
-  // RFC 3550 style jitter calculation
+  // RFC 3550-style jitter should describe the normal spread of RTT measurements,
+  // not the magnitude of a single transient spike. Median absolute deviation keeps
+  // the value stable under short-lived outliers while preserving real network noise.
   let jitterMs: number | null = null;
   if (rawValues.length >= 2) {
-    let sumDeltas = 0;
-    for (let j = 1; j < rawValues.length; j++) {
-      sumDeltas += Math.abs(rawValues[j] - rawValues[j - 1]);
-    }
-    jitterMs = Math.round(sumDeltas / (rawValues.length - 1));
+    jitterMs = calculateJitterMs(rawValues);
   }
 
   return {

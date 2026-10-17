@@ -16,3 +16,6 @@ coverage/
 # Local Android release signing material
 /android/keystore.properties
 /android/signing/
+
+.vercel
+.env*.local

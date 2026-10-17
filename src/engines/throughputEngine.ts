@@ -178,75 +178,83 @@ export async function measureThroughput(
       }
     } else {
       // Upload throughput test
-      // Generate safe synthetic test chunks (e.g. 512KB chunks) and post to discard endpoint
-      const chunkSize = 512 * 1024; // 512 KB
+      // A single serialized POST path can underutilize the uplink on modern networks.
+      // Use a modest number of parallel uploads to better match actual end-user throughput.
+      const chunkSize = 2 * 1024 * 1024; // 2 MB chunks
       const chunkData = new Uint8Array(chunkSize);
-      // Fill with non-zero entropy data to minimize transparent compression skew
       for (let i = 0; i < chunkSize; i += 16) {
         chunkData[i] = (i * 37) % 256;
       }
 
+      const uploadConcurrency = 3;
       let lastSampleTime = startTime;
       let lastSampleBytes = 0;
+      let completedChunks = 0;
 
-      while (true) {
-        if (signal?.aborted) {
-          status = 'cancelled';
-          break;
-        }
+      const worker = async () => {
+        while (true) {
+          if (signal?.aborted) {
+            status = 'cancelled';
+            return;
+          }
 
-        const now = performance.now();
-        if (now - startTime >= durationTargetMs && now - startTime >= minimumStableWindowMs) break;
-        if (hasExplicitCap && bytesTransferred >= effectiveMaxBytes) break;
+          const now = performance.now();
+          if (now - startTime >= durationTargetMs && now - startTime >= minimumStableWindowMs) return;
+          if (hasExplicitCap && bytesTransferred >= effectiveMaxBytes) return;
 
-        const uploadUrl = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}upload_t=${Date.now()}`;
-        const chunkStart = performance.now();
-        const requestTimeout = createRequestTimeout(signal, 15_000);
-        let res: Response;
-        try {
-          res = await fetch(uploadUrl, {
-            method: 'POST',
-            body: chunkData,
-            headers: {
-              'Content-Type': 'application/octet-stream',
-            },
-            cache: 'no-store',
-            signal: requestTimeout.signal,
-          });
-        } finally {
-          requestTimedOut ||= requestTimeout.didTimeout();
-          requestTimeout.dispose();
-        }
+          const uploadUrl = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}upload_t=${Date.now()}_${completedChunks}`;
+          const requestTimeout = createRequestTimeout(signal, 15_000);
+          let res: Response;
 
-        if (!res.ok) {
-          throw new Error(`Upload endpoint returned HTTP ${res.status}`);
-        }
+          try {
+            res = await fetch(uploadUrl, {
+              method: 'POST',
+              body: chunkData,
+              headers: {
+                'Content-Type': 'application/octet-stream',
+              },
+              cache: 'no-store',
+              signal: requestTimeout.signal,
+            });
+          } finally {
+            requestTimedOut ||= requestTimeout.didTimeout();
+            requestTimeout.dispose();
+          }
 
-        bytesTransferred += chunkSize;
-        const chunkEnd = performance.now();
-        const elapsedTotal = chunkEnd - startTime;
+          if (!res.ok) {
+            throw new Error(`Upload endpoint returned HTTP ${res.status}`);
+          }
 
-        if (chunkEnd - lastSampleTime >= 200) {
-          const chunkElapsed = (chunkEnd - lastSampleTime) / 1000;
-          const chunkBytes = bytesTransferred - lastSampleBytes;
-          const instantMbps = (chunkBytes * 8) / (chunkElapsed * 1000000);
+          bytesTransferred += chunkSize;
+          completedChunks += 1;
+          const chunkEnd = performance.now();
+          const elapsedTotal = chunkEnd - startTime;
 
-          samples.push({
-            timestamp: Date.now(),
-            bytes: bytesTransferred,
-            instantMbps: Number(instantMbps.toFixed(2)),
-          });
+          if (chunkEnd - lastSampleTime >= 200) {
+            const chunkElapsed = (chunkEnd - lastSampleTime) / 1000;
+            const chunkBytes = bytesTransferred - lastSampleBytes;
+            const instantMbps = (chunkBytes * 8) / (chunkElapsed * 1000000);
 
-          lastSampleTime = chunkEnd;
-          lastSampleBytes = bytesTransferred;
+            samples.push({
+              timestamp: Date.now(),
+              bytes: bytesTransferred,
+              instantMbps: Number(instantMbps.toFixed(2)),
+            });
 
-          if (onProgress) {
-            const overallMbps =
-              (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
-            onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal), samples[samples.length - 1]);
+            lastSampleTime = chunkEnd;
+            lastSampleBytes = bytesTransferred;
+
+            if (onProgress) {
+              const overallMbps =
+                (bytesTransferred * 8) / ((elapsedTotal / 1000) * 1000000);
+              onProgress(bytesTransferred, overallMbps, Math.round(elapsedTotal), samples[samples.length - 1]);
+            }
           }
         }
-      }
+      };
+
+      const workers = Array.from({ length: uploadConcurrency }, () => worker());
+      await Promise.all(workers);
     }
   } catch (err: unknown) {
     if (signal?.aborted) {

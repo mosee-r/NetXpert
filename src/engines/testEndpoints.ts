@@ -1,3 +1,5 @@
+import { CLOUDFLARE_HOST, DEFAULT_SERVER_ID } from '../config/defaults';
+
 export interface TestEndpoints {
   ping: string;
   download: string;
@@ -246,7 +248,7 @@ export function getServerById(id: string): SpeedTestServer | undefined {
  * Get the default server (auto-selected based on user location or first in list)
  */
 export function getDefaultServer(): SpeedTestServer {
-  return CLOUDFLARE_SPEED_SERVERS[0]; // Johannesburg as default for African users
+  return getServerById(DEFAULT_SERVER_ID) || CLOUDFLARE_SPEED_SERVERS[0];
 }
 
 /**
@@ -254,7 +256,7 @@ export function getDefaultServer(): SpeedTestServer {
  */
 export function getTestEndpointsForServer(serverId: string): TestEndpoints {
   const server = getServerById(serverId);
-  const hostname = server?.hostname || 'speed.cloudflare.com';
+  const hostname = server?.hostname || CLOUDFLARE_HOST;
   const origin = `https://${hostname}`;
   
   return {
@@ -265,7 +267,7 @@ export function getTestEndpointsForServer(serverId: string): TestEndpoints {
 }
 
 export function getDefaultTestEndpoints(): TestEndpoints {
-  return getTestEndpointsForServer('jnb'); // Default to Johannesburg
+  return getTestEndpointsForServer(DEFAULT_SERVER_ID);
 }
 
 export function createDownloadTestUrl(
@@ -279,7 +281,7 @@ export function createDownloadTestUrl(
       : window.location.origin || 'https://example.com';
   const url = new URL(targetUrl, baseUrl);
   const sizeParameter =
-    url.hostname === 'speed.cloudflare.com' && url.pathname === '/__down'
+    url.hostname === CLOUDFLARE_HOST && url.pathname === '/__down'
       ? 'bytes'
       : 'size';
 
@@ -298,5 +300,5 @@ export function getServerIdFromHostname(hostname: string): string {
   const server = CLOUDFLARE_SPEED_SERVERS.find(
     (s) => s.hostname === hostname || new URL(s.hostname).hostname === new URL(hostname).hostname
   );
-  return server?.id || 'jnb';
+  return server?.id || DEFAULT_SERVER_ID;
 }
