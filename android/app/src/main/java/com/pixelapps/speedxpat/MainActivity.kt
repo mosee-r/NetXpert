@@ -162,7 +162,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         webView.webViewClient = SpeedXpatWebViewClient(this)
-        webView.loadUrl("file:///android_asset/www/index.html")
+        webView.loadUrl("https://appassets.androidplatform.net/index.html")
     }
 
     override fun onResume() {
