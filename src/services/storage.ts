@@ -7,11 +7,18 @@
  */
 
 import { OverallAssessmentReport } from '../types/scoring';
+import { ThroughputSummary } from '../types/network';
 import { getAndroidNativeBridge } from '../engines/testEndpoints';
 import { maskIpAddress } from '../utils/privacy';
 
 const STORAGE_KEY = 'speedxpat_assessment_history_v1';
 const LEGACY_STORAGE_KEY = 'netxpert_assessment_history_v1';
+
+// Helper to get primary (last/largest) throughput from array
+function getPrimaryThroughput(results: ThroughputSummary[] | undefined): ThroughputSummary | null {
+  if (!results || results.length === 0) return null;
+  return results[results.length - 1] || results[0];
+}
 
 export function saveAssessmentReport(report: OverallAssessmentReport): boolean {
   try {
@@ -87,8 +94,8 @@ export function exportReportToCsv(report: OverallAssessmentReport): string {
     [],
     ['Primary speed-test provider', 'Cloudflare Speed Test edge (automatically selected)'],
     ['Primary Speed-Test Server Details'],
-    ['Download endpoint', report.rawMeasurements.downloadThroughput.target],
-    ['Upload endpoint', report.rawMeasurements.uploadThroughput.target],
+    ['Download endpoint', getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.target ?? 'N/A'],
+    ['Upload endpoint', getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.target ?? 'N/A'],
     [],
     ['Separate M-Lab Diagnostic Server Details'],
     ['M-Lab server', report.mlabDiagnostics?.server?.label || report.mlabDiagnostics?.lookupError || 'Not available'],
@@ -130,17 +137,17 @@ export function exportReportToCsv(report: OverallAssessmentReport): string {
     ],
     [
       'Download Throughput',
-      String(report.rawMeasurements.downloadThroughput.mbps ?? 'N/A'),
+      String(getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.mbps ?? 'N/A'),
       'Mbps',
-      report.rawMeasurements.downloadThroughput.method,
-      report.rawMeasurements.downloadThroughput.status,
+      getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.method ?? 'N/A',
+      getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.status ?? 'N/A',
     ],
     [
       'Upload Throughput',
-      String(report.rawMeasurements.uploadThroughput.mbps ?? 'N/A'),
+      String(getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.mbps ?? 'N/A'),
       'Mbps',
-      report.rawMeasurements.uploadThroughput.method,
-      report.rawMeasurements.uploadThroughput.status,
+      getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.method ?? 'N/A',
+      getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.status ?? 'N/A',
     ],
     [
       'Latency Under Load (Bufferbloat Delta)',

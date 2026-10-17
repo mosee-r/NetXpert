@@ -67,6 +67,17 @@ export interface ThroughputChartPoint {
   mbps: number;
 }
 
+export interface SpeedTestServer {
+  id: string;
+  hostname: string;
+  name: string;
+  country: string;
+  city: string;
+  latitude: number;
+  longitude: number;
+  continent: string;
+}
+
 export interface ThroughputSummary {
   status: TestStatus;
   target: string;
@@ -79,6 +90,15 @@ export interface ThroughputSummary {
   samples: ThroughputSample[];
   limitations: string[];
   errorMessage?: string;
+  testSizeBytes?: number; // For multi-size testing
+  percentile90?: number | null; // 90th percentile throughput
+  percentile95?: number | null; // 95th percentile throughput
+}
+
+export interface MultiSizeThroughputResult {
+  sizeLabel: string;
+  sizeBytes: number;
+  result: ThroughputSummary;
 }
 
 export interface LoadedLatencySummary {
@@ -87,6 +107,17 @@ export interface LoadedLatencySummary {
   underLoadLatencyMs: number | null;
   postLoadLatencyMs: number | null;
   loadedDeltaMs: number | null; // Latency increase under load (Bufferbloat)
+  bufferbloatGrade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | 'unknown';
+  severityDescription: string;
+  limitations: string[];
+}
+
+export interface UploadLatencySummary {
+  status: TestStatus;
+  baselineLatencyMs: number | null;
+  underUploadLatencyMs: number | null;
+  postUploadLatencyMs: number | null;
+  loadedDeltaMs: number | null; // Latency increase during upload
   bufferbloatGrade: 'A+' | 'A' | 'B' | 'C' | 'D' | 'F' | 'unknown';
   severityDescription: string;
   limitations: string[];
@@ -116,6 +147,24 @@ export interface HttpTimingResult {
   limitations: string[];
 }
 
+export interface PacketLossSample {
+  timestamp: number;
+  success: boolean;
+  latencyMs: number | null;
+}
+
+export interface PacketLossSummary {
+  status: TestStatus;
+  target: string;
+  method: string;
+  sent: number;
+  received: number;
+  packetLossPercent: number | null;
+  samples: PacketLossSample[];
+  limitations: string[];
+  errorMessage?: string;
+}
+
 export interface NearestMeasurementServer {
   machine?: string;
   hostname?: string;
@@ -139,6 +188,15 @@ export interface DeviceNetworkInfo {
   locationRegion?: string;
   locationCountry?: string;
   nearestServer?: NearestMeasurementServer;
+  testServer?: {
+    id: string;
+    hostname: string;
+    name: string;
+    country: string;
+    city?: string;
+    latitude?: number;
+    longitude?: number;
+  };
   wifiSsid?: string;
   wifiSignalDbm?: number;
   wifiFrequencyMhz?: number;

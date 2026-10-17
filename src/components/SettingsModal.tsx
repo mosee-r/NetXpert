@@ -33,8 +33,6 @@ interface SettingsModalProps {
   setConcurrencyCount: (val: number) => void;
   dataSaverMode: boolean;
   setDataSaverMode: (val: boolean) => void;
-  useMlab: boolean;
-  setUseMlab: (val: boolean) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -58,8 +56,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   setConcurrencyCount,
   dataSaverMode,
   setDataSaverMode,
-  useMlab,
-  setUseMlab,
 }) => {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
@@ -149,39 +145,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
         {/* Form Controls */}
         <div className="space-y-4 py-4 text-xs">
-          {/* M-Lab diagnostics, data saver, and stream concurrency */}
+          {/* Data saver and stream concurrency */}
           <div className="p-3.5 rounded-xl bg-[#15253D] border border-white/5 space-y-3">
             <div className="flex items-center justify-between">
-              <div className="min-w-0 flex-1 pr-3">
-                <span className="font-semibold text-slate-200 block flex items-center space-x-1.5">
-                  <span>M-Lab deep TCP diagnostics</span>
-                  <span className="text-[9px] font-mono px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 border border-slate-700">
-                    Optional
-                  </span>
-                </span>
-                <span className="text-[11px] text-slate-400">
-                  Runs separately after the Cloudflare speed test; includes M-Lab server metadata and may use extra data.
-                </span>
-              </div>
-              <button
-                onClick={() => setUseMlab(!useMlab)}
-                type="button"
-                role="switch"
-                aria-checked={useMlab}
-                aria-label="Run M-Lab deep TCP diagnostics"
-                className={`w-11 h-6 shrink-0 rounded-full transition-colors p-0.5 relative cursor-pointer ${
-                  useMlab ? 'bg-cyan-500' : 'bg-slate-700'
-                }`}
-              >
-                <div
-                  className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                    useMlab ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-
-            <div className="pt-2 border-t border-white/5 flex items-center justify-between">
               <div className="min-w-0 flex-1 pr-3">
                 <span className="font-semibold text-slate-200 block">Data Saver Mode</span>
                 <span className="text-[11px] text-slate-400">Limits test transfer to &lt; 5 MB on mobile connections</span>

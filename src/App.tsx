@@ -72,13 +72,20 @@ export default function App() {
   const [history, setHistory] = useState<OverallAssessmentReport[]>(() =>
     getAssessmentHistory()
   );
+  // Helper to get primary throughput from array
+  const getPrimaryThroughput = (results: any[] | undefined) => {
+    if (!results || results.length === 0) return null;
+    return results[results.length - 1] || results[0];
+  };
+
   const [currentReport, setCurrentReport] = useState<OverallAssessmentReport | null>(() => {
     const list = getAssessmentHistory();
     return list.length > 0 ? list[0] : null;
   });
   const [pendingReport, setPendingReport] = useState<OverallAssessmentReport | null>(null);
   const [showResults, setShowResults] = useState(false);
-  const initialDownloadMbps = currentReport?.rawMeasurements.downloadThroughput.mbps;
+  const primaryDownload = getPrimaryThroughput(currentReport?.rawMeasurements.downloadThroughput);
+  const initialDownloadMbps = primaryDownload?.mbps;
 
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
@@ -91,7 +98,7 @@ export default function App() {
   const [useUploadCap, setUseUploadCap] = useState(!benchmarkMode);
   const [concurrencyCount, setConcurrencyCount] = useState(4);
   const [dataSaverMode, setDataSaverMode] = useState(false);
-  const [useMlab, setUseMlab] = useState(true);
+  const [useMlab, setUseMlab] = useState(false);
 
   const [isTesting, setIsTesting] = useState(false);
   const [isSplashActive, setIsSplashActive] = useState(true);
@@ -184,7 +191,8 @@ export default function App() {
   const lastPhaseRef = useRef<string>('');
 
   useEffect(() => {
-    const downloadMbps = currentReport?.rawMeasurements.downloadThroughput.mbps;
+    const primaryDownload = getPrimaryThroughput(currentReport?.rawMeasurements.downloadThroughput);
+    const downloadMbps = primaryDownload?.mbps;
     if (downloadMbps !== null && downloadMbps !== undefined) {
       setHeroValue(downloadMbps.toFixed(1));
       setHeroUnit('Mbps');
@@ -362,21 +370,26 @@ export default function App() {
       setPendingReport(report);
       setShowResults(true);
 
-      const downloadSamples = report.rawMeasurements.downloadThroughput.samples;
+      // Get primary (last/largest) results for sparkline display
+      const primaryDownload = getPrimaryThroughput(report.rawMeasurements.downloadThroughput);
+      const primaryUpload = getPrimaryThroughput(report.rawMeasurements.uploadThroughput);
+      
+      const downloadSamples = primaryDownload?.samples ?? [];
       const firstDownloadTimestamp = downloadSamples[0]?.timestamp ?? 0;
-      setDownloadSparklineData(downloadSamples.map((sample) => ({
+      setDownloadSparklineData(downloadSamples.map((sample: { timestamp: number; instantMbps: number }) => ({
         elapsedMs: Math.max(0, sample.timestamp - firstDownloadTimestamp),
         mbps: sample.instantMbps,
       })));
-      const uploadSamples = report.rawMeasurements.uploadThroughput.samples;
+      
+      const uploadSamples = primaryUpload?.samples ?? [];
       const firstUploadTimestamp = uploadSamples[0]?.timestamp ?? 0;
-      setUploadSparklineData(uploadSamples.map((sample) => ({
+      setUploadSparklineData(uploadSamples.map((sample: { timestamp: number; instantMbps: number }) => ({
         elapsedMs: Math.max(0, sample.timestamp - firstUploadTimestamp),
         mbps: sample.instantMbps,
       })));
 
       // Set final hero readout
-      const finalDl = report.rawMeasurements.downloadThroughput.mbps;
+      const finalDl = primaryDownload?.mbps;
       if (finalDl !== null && finalDl !== undefined) {
         setHeroValue(finalDl.toFixed(1));
         setHeroUnit('Mbps');
@@ -596,6 +609,8 @@ export default function App() {
           <NetworkTab
             networkInfo={networkInfo}
             history={history}
+            useMlab={useMlab}
+            setUseMlab={setUseMlab}
             onRefreshNetworkInfo={async () => {
               const info = await detectNetworkInfo(setIsOnline);
               setNetworkInfo(info);
@@ -649,8 +664,6 @@ export default function App() {
         setConcurrencyCount={setConcurrencyCount}
         dataSaverMode={dataSaverMode}
         setDataSaverMode={setDataSaverMode}
-        useMlab={useMlab}
-        setUseMlab={setUseMlab}
       />
     </div>
   );

@@ -13,6 +13,7 @@ import {
   LoadedLatencySummary,
   DnsTimingResult,
   DeviceNetworkInfo,
+  PacketLossSummary,
 } from '../types/network';
 import {
   ActivityAssessment,
@@ -25,23 +26,81 @@ import {
 
 interface AssessmentInputs {
   latency: LatencySummary;
-  download: ThroughputSummary;
-  upload: ThroughputSummary;
+  download: ThroughputSummary[]; // Multi-size results
+  upload: ThroughputSummary[]; // Multi-size results
   loadedLatency: LoadedLatencySummary;
   dns: DnsTimingResult;
   networkInfo: DeviceNetworkInfo;
+  packetLoss?: PacketLossSummary;
+  latencyDuringUpload?: LoadedLatencySummary; // Upload latency returns LoadedLatencySummary
+}
+
+/**
+ * Helper to get primary throughput result from array (uses last/largest for backward compatibility)
+ */
+function getPrimaryThroughput(results: ThroughputSummary[]): ThroughputSummary | null {
+  if (!results || results.length === 0) return null;
+  return results[results.length - 1] || results[0];
+}
+
+/**
+ * Helper to get average throughput from array
+ */
+function getAverageThroughput(results: ThroughputSummary[]): number | null {
+  if (!results || results.length === 0) return null;
+  const validResults = results.filter((r) => r.mbps !== null);
+  if (validResults.length === 0) return null;
+  const sum = validResults.reduce((acc, r) => acc + (r.mbps || 0), 0);
+  return sum / validResults.length;
 }
 
 /**
  * 1. Online Gaming Assessment
  */
 function assessGaming(inputs: AssessmentInputs): ActivityAssessment {
-  const { latency, loadedLatency } = inputs;
+  const { latency, loadedLatency, packetLoss, latencyDuringUpload } = inputs;
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
   const confidenceReasons: string[] = [];
   let confidence: ConfidenceLevel = 'high';
+
+  // Check 0: Packet Loss (Critical for gaming)
+  if (packetLoss && packetLoss.packetLossPercent !== null && packetLoss.status === 'success') {
+    const lossPercent = packetLoss.packetLossPercent;
+    let status: CheckStatus = 'fail';
+    if (lossPercent < 0.1) {
+      status = 'pass';
+    } else if (lossPercent < 1) {
+      status = 'borderline';
+    }
+
+    checks.push({
+      metric: 'packet_loss',
+      label: 'Packet Loss',
+      status,
+      measuredValue: lossPercent,
+      unit: '%',
+      thresholdDescription: '< 0.1% packet loss for stable gaming',
+      explanation:
+        status === 'pass'
+          ? `Excellent packet delivery (${lossPercent}% loss). No dropped inputs or desyncs.`
+          : status === 'borderline'
+          ? `Minor packet loss (${lossPercent}%) may cause occasional missed hits or rubber-banding.`
+          : `High packet loss (${lossPercent}%) will cause frequent desyncs, missed shots, and game disconnects.`,
+    });
+
+    if (status === 'fail') {
+      bottlenecks.push(`High packet loss (${lossPercent}%)`);
+      recommendations.push(
+        'Check your connection stability. Packet loss above 1% severely impacts online gaming. Try a wired connection or contact your ISP.'
+      );
+    } else if (status === 'borderline') {
+      recommendations.push(
+        'Packet loss between 0.1-1% may cause occasional issues. Monitor during gameplay.'
+      );
+    }
+  }
 
   // Check 1: Idle Latency
   if (latency.medianMs !== null && latency.status === 'success') {
@@ -185,6 +244,38 @@ function assessGaming(inputs: AssessmentInputs): ActivityAssessment {
     if (confidence === 'high') confidence = 'medium';
   }
 
+  // Check 4: Latency During Upload
+  if (latencyDuringUpload && latencyDuringUpload.underLoadLatencyMs !== null && latencyDuringUpload.status === 'success') {
+    const uploadLatencyMs = latencyDuringUpload.underLoadLatencyMs;
+    let status: CheckStatus = 'fail';
+    if (uploadLatencyMs <= THRESHOLDS.gaming.latency.excellentMaxMs) {
+      status = 'pass';
+    } else if (uploadLatencyMs <= THRESHOLDS.gaming.latency.goodMaxMs) {
+      status = 'pass';
+    } else if (uploadLatencyMs <= THRESHOLDS.gaming.latency.fairMaxMs) {
+      status = 'borderline';
+    }
+
+    checks.push({
+      metric: 'upload_latency',
+      label: 'Latency During Upload',
+      status,
+      measuredValue: uploadLatencyMs,
+      unit: 'ms',
+      thresholdDescription: `< ${THRESHOLDS.gaming.latency.goodMaxMs} ms during upload`,
+      explanation:
+        status === 'pass'
+          ? `Low latency (${uploadLatencyMs} ms) maintained during upload. Gaming unaffected by uploads.`
+          : status === 'borderline'
+          ? `Moderate latency (${uploadLatencyMs} ms) during upload; may cause minor stutter.`
+          : `High latency (${uploadLatencyMs} ms) during upload will cause noticeable lag spikes.`,
+    });
+
+    if (status === 'fail') {
+      bottlenecks.push(`High latency during upload (${uploadLatencyMs} ms)`);
+    }
+  }
+
   // Evaluate Rating using strict requirement gates
   let rating: ActivityRating = 'excellent';
   const hasFail = checks.some((c) => c.status === 'fail');
@@ -238,14 +329,18 @@ function assessGaming(inputs: AssessmentInputs): ActivityAssessment {
  */
 function assessStreaming(inputs: AssessmentInputs): ActivityAssessment {
   const { download, latency } = inputs;
+  const primaryDownload = getPrimaryThroughput(download);
+  const avgDownload = getAverageThroughput(download);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
   const confidenceReasons: string[] = [];
   let confidence: ConfidenceLevel = 'high';
 
-  if (download.mbps !== null && download.status === 'success') {
-    const mbps = download.mbps;
+  const effectiveMbps = primaryDownload?.mbps ?? avgDownload;
+  
+  if (primaryDownload && primaryDownload.mbps !== null && primaryDownload.status === 'success') {
+    const mbps = primaryDownload.mbps;
 
     // Check 1: 1080p HD Streaming
     const hdStatus: CheckStatus =
@@ -276,6 +371,9 @@ function assessStreaming(inputs: AssessmentInputs): ActivityAssessment {
         ? 'borderline'
         : 'fail';
 
+    // Include multi-size info if available
+    const sizeInfo = download.length > 1 ? ` (100KB: ${download[0]?.mbps?.toFixed(1) || 'N/A'} Mbps, 1MB: ${download[1]?.mbps?.toFixed(1) || 'N/A'} Mbps, 10MB: ${download[2]?.mbps?.toFixed(1) || 'N/A'} Mbps)` : '';
+
     checks.push({
       metric: '4k_streaming',
       label: '4K Ultra HD Streaming Capability',
@@ -285,10 +383,10 @@ function assessStreaming(inputs: AssessmentInputs): ActivityAssessment {
       thresholdDescription: `>= ${THRESHOLDS.streaming.ultraHd4kMinMbps} Mbps`,
       explanation:
         uhdStatus === 'pass'
-          ? `Bandwidth of ${mbps.toFixed(1)} Mbps provides reliable headroom for high-bitrate 4K HDR streams.`
+          ? `Bandwidth of ${mbps.toFixed(1)} Mbps provides reliable headroom for high-bitrate 4K HDR streams.${sizeInfo}`
           : uhdStatus === 'borderline'
-          ? `Bandwidth is sufficient for HD, but 4K streams may experience initial buffering or quality drops if other devices are active.`
-          : `Bandwidth (${mbps.toFixed(1)} Mbps) is below the 25 Mbps threshold for 4K streaming.`,
+          ? `Bandwidth is sufficient for HD, but 4K streams may experience initial buffering or quality drops if other devices are active.${sizeInfo}`
+          : `Bandwidth (${mbps.toFixed(1)} Mbps) is below the 25 Mbps threshold for 4K streaming.${sizeInfo}`,
     });
 
     if (hdStatus === 'fail') {
@@ -329,8 +427,8 @@ function assessStreaming(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   let rating: ActivityRating = 'excellent';
-  const mbps = download.mbps || 0;
-  if (download.status !== 'success') {
+  const mbps = effectiveMbps || 0;
+  if (primaryDownload?.status !== 'success' && !avgDownload) {
     rating = 'insufficient_data';
   } else if (mbps >= THRESHOLDS.streaming.ultraHd4kMinMbps) {
     rating = 'excellent';
@@ -377,6 +475,8 @@ function assessStreaming(inputs: AssessmentInputs): ActivityAssessment {
  */
 function assessConferencing(inputs: AssessmentInputs): ActivityAssessment {
   const { download, upload, latency, loadedLatency } = inputs;
+  const primaryDownload = getPrimaryThroughput(download);
+  const primaryUpload = getPrimaryThroughput(upload);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
@@ -384,18 +484,18 @@ function assessConferencing(inputs: AssessmentInputs): ActivityAssessment {
   let confidence: ConfidenceLevel = 'high';
 
   // Check 1: Download Throughput
-  if (download.mbps !== null && download.status === 'success') {
-    const pass = download.mbps >= THRESHOLDS.conferencing.downloadMinMbps;
+  if (primaryDownload && primaryDownload.mbps !== null && primaryDownload.status === 'success') {
+    const pass = primaryDownload.mbps >= THRESHOLDS.conferencing.downloadMinMbps;
     checks.push({
       metric: 'download_capacity',
       label: 'Download Capacity (Receive Video)',
       status: pass ? 'pass' : 'fail',
-      measuredValue: download.mbps,
+      measuredValue: primaryDownload.mbps,
       unit: 'Mbps',
       thresholdDescription: `>= ${THRESHOLDS.conferencing.downloadMinMbps} Mbps`,
       explanation: pass
-        ? `Comfortable download speed (${download.mbps.toFixed(1)} Mbps) for incoming participant video.`
-        : `Download throughput (${download.mbps.toFixed(1)} Mbps) may degrade incoming video clarity.`,
+        ? `Comfortable download speed (${primaryDownload.mbps.toFixed(1)} Mbps) for incoming participant video.`
+        : `Download throughput (${primaryDownload.mbps.toFixed(1)} Mbps) may degrade incoming video clarity.`,
     });
     if (!pass) bottlenecks.push('Low download bandwidth for conference video');
   } else {
@@ -411,21 +511,21 @@ function assessConferencing(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   // Check 2: Upload Throughput (Bidirectional requirement)
-  if (upload.mbps !== null && upload.status === 'success') {
-    const pass = upload.mbps >= THRESHOLDS.conferencing.uploadMinMbps;
+  if (primaryUpload && primaryUpload.mbps !== null && primaryUpload.status === 'success') {
+    const pass = primaryUpload.mbps >= THRESHOLDS.conferencing.uploadMinMbps;
     checks.push({
       metric: 'upload_capacity',
       label: 'Upload Capacity (Camera & Screen Share)',
       status: pass ? 'pass' : 'fail',
-      measuredValue: upload.mbps,
+      measuredValue: primaryUpload.mbps,
       unit: 'Mbps',
       thresholdDescription: `>= ${THRESHOLDS.conferencing.uploadMinMbps} Mbps`,
       explanation: pass
-        ? `Upload throughput (${upload.mbps.toFixed(1)} Mbps) is plenty for HD outgoing video & screen sharing.`
-        : `Upload bandwidth (${upload.mbps.toFixed(1)} Mbps) is tight; outgoing camera feed may stutter or drop to low resolution.`,
+        ? `Upload throughput (${primaryUpload.mbps.toFixed(1)} Mbps) is plenty for HD outgoing video & screen sharing.`
+        : `Upload bandwidth (${primaryUpload.mbps.toFixed(1)} Mbps) is tight; outgoing camera feed may stutter or drop to low resolution.`,
     });
     if (!pass) {
-      bottlenecks.push(`Constrained upload speed (${upload.mbps.toFixed(1)} Mbps)`);
+      bottlenecks.push(`Constrained upload speed (${primaryUpload.mbps.toFixed(1)} Mbps)`);
       recommendations.push(
         'Turn off webcam or stop high-res screen sharing if meeting attendees report freezing.'
       );
@@ -489,6 +589,48 @@ function assessConferencing(inputs: AssessmentInputs): ActivityAssessment {
     });
   }
 
+  // Check 5: Packet Loss (from inputs)
+  const { packetLoss, latencyDuringUpload } = inputs;
+  if (packetLoss && packetLoss.packetLossPercent !== null && packetLoss.status === 'success') {
+    const lossPercent = packetLoss.packetLossPercent;
+    const lossPass = lossPercent < 0.5;
+    checks.push({
+      metric: 'packet_loss',
+      label: 'Call Packet Stability',
+      status: lossPass ? 'pass' : 'fail',
+      measuredValue: lossPercent,
+      unit: '%',
+      thresholdDescription: '< 0.5% packet loss for clear calls',
+      explanation: lossPass
+        ? `Excellent packet stability (${lossPercent}% loss). Clear audio without dropouts.`
+        : `Packet loss (${lossPercent}%) may cause audio glitches, robotic voice, or call drops.`,
+    });
+    
+    if (!lossPass) {
+      bottlenecks.push(`High packet loss (${lossPercent}%)`);
+      recommendations.push(
+        'Packet loss above 0.5% causes audio artifacts. Use a wired connection or check network stability.'
+      );
+    }
+  }
+
+  // Check 6: Latency During Upload
+  if (latencyDuringUpload && latencyDuringUpload.underLoadLatencyMs !== null && latencyDuringUpload.status === 'success') {
+    const uploadLatencyMs = latencyDuringUpload.underLoadLatencyMs;
+    const uploadLatencyPass = uploadLatencyMs <= THRESHOLDS.conferencing.latencyMaxMs * 2;
+    checks.push({
+      metric: 'upload_latency_impact',
+      label: 'Latency During Upload',
+      status: uploadLatencyPass ? 'pass' : 'borderline',
+      measuredValue: uploadLatencyMs,
+      unit: 'ms',
+      thresholdDescription: `< ${THRESHOLDS.conferencing.latencyMaxMs * 2} ms during upload`,
+      explanation: uploadLatencyPass
+        ? `Acceptable latency (${uploadLatencyMs} ms) during upload. Video calls remain smooth.`
+        : `Latency spikes to ${uploadLatencyMs} ms during upload, potentially causing call quality issues.`,
+    });
+  }
+
   // Determine overall rating
   let rating: ActivityRating = 'excellent';
   const hasFail = checks.some((c) => c.status === 'fail');
@@ -538,6 +680,7 @@ function assessConferencing(inputs: AssessmentInputs): ActivityAssessment {
  */
 function assessBrowsing(inputs: AssessmentInputs): ActivityAssessment {
   const { dns, latency, download } = inputs;
+  const primaryDownload = getPrimaryThroughput(download);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
@@ -601,18 +744,18 @@ function assessBrowsing(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   // Check 3: Asset Download Capacity
-  if (download.mbps !== null && download.status === 'success') {
-    const pass = download.mbps >= THRESHOLDS.browsing.downloadMinMbps;
+  if (primaryDownload && primaryDownload.mbps !== null && primaryDownload.status === 'success') {
+    const pass = primaryDownload.mbps >= THRESHOLDS.browsing.downloadMinMbps;
     checks.push({
       metric: 'asset_download',
       label: 'Web Asset & Image Download',
       status: pass ? 'pass' : 'borderline',
-      measuredValue: download.mbps,
+      measuredValue: primaryDownload.mbps,
       unit: 'Mbps',
       thresholdDescription: `>= ${THRESHOLDS.browsing.downloadMinMbps} Mbps`,
       explanation: pass
-        ? `Ample throughput (${download.mbps.toFixed(1)} Mbps) for loading media-rich websites and web apps.`
-        : `Lower throughput (${download.mbps.toFixed(1)} Mbps); heavy web pages with large media will load slowly.`,
+        ? `Ample throughput (${primaryDownload.mbps.toFixed(1)} Mbps) for loading media-rich websites and web apps.`
+        : `Lower throughput (${primaryDownload.mbps.toFixed(1)} Mbps); heavy web pages with large media will load slowly.`,
     });
   }
 
@@ -663,6 +806,7 @@ function assessBrowsing(inputs: AssessmentInputs): ActivityAssessment {
  */
 function assessRemoteWork(inputs: AssessmentInputs): ActivityAssessment {
   const { download, upload, latency, loadedLatency } = inputs;
+  const primaryDownload = getPrimaryThroughput(download);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
@@ -697,18 +841,18 @@ function assessRemoteWork(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   // Check 2: VPN Tunnel Bandwidth
-  if (download.mbps !== null && download.status === 'success') {
-    const pass = download.mbps >= THRESHOLDS.remoteWork.downloadMinMbps;
+  if (primaryDownload && primaryDownload.mbps !== null && primaryDownload.status === 'success') {
+    const pass = primaryDownload.mbps >= THRESHOLDS.remoteWork.downloadMinMbps;
     checks.push({
       metric: 'vpn_bandwidth',
       label: 'VPN Tunnel Throughput',
       status: pass ? 'pass' : 'borderline',
-      measuredValue: download.mbps,
+      measuredValue: primaryDownload.mbps,
       unit: 'Mbps',
       thresholdDescription: `>= ${THRESHOLDS.remoteWork.downloadMinMbps} Mbps`,
       explanation: pass
-        ? `Good download bandwidth (${download.mbps.toFixed(1)} Mbps) to handle VPN encryption overhead.`
-        : `Marginal bandwidth (${download.mbps.toFixed(1)} Mbps) for company VPN data tunnels.`,
+        ? `Good download bandwidth (${primaryDownload.mbps.toFixed(1)} Mbps) to handle VPN encryption overhead.`
+        : `Marginal bandwidth (${primaryDownload.mbps.toFixed(1)} Mbps) for company VPN data tunnels.`,
     });
   }
 
@@ -781,14 +925,16 @@ function assessRemoteWork(inputs: AssessmentInputs): ActivityAssessment {
  */
 function assessTransfers(inputs: AssessmentInputs): ActivityAssessment {
   const { download, upload } = inputs;
+  const primaryDownload = getPrimaryThroughput(download);
+  const primaryUpload = getPrimaryThroughput(upload);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];
   const recommendations: string[] = [];
   const confidenceReasons: string[] = [];
   let confidence: ConfidenceLevel = 'high';
 
-  const dlMbps = download.mbps || 0;
-  const ulMbps = upload.mbps || 0;
+  const dlMbps = primaryDownload?.mbps || 0;
+  const ulMbps = primaryUpload?.mbps || 0;
 
   // Convert to Megabytes per second (MB/s) -> 1 MB/s = 8 Mbps
   const dlMBps = dlMbps / 8;
@@ -807,7 +953,7 @@ function assessTransfers(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   // Check 1: Download Throughput
-  if (download.status === 'success' && download.mbps !== null) {
+  if (primaryDownload?.status === 'success' && primaryDownload.mbps !== null) {
     const status: CheckStatus =
       dlMbps >= THRESHOLDS.transfers.fastDownloadMbps
         ? 'pass'
@@ -844,7 +990,7 @@ function assessTransfers(inputs: AssessmentInputs): ActivityAssessment {
   }
 
   // Check 2: Upload Throughput
-  if (upload.status === 'success' && upload.mbps !== null) {
+  if (primaryUpload?.status === 'success' && primaryUpload.mbps !== null) {
     const status: CheckStatus =
       ulMbps >= THRESHOLDS.transfers.fastUploadMbps
         ? 'pass'
@@ -887,7 +1033,7 @@ function assessTransfers(inputs: AssessmentInputs): ActivityAssessment {
     rating = 'good';
   } else if (dlMbps >= 10) {
     rating = 'fair';
-  } else if (download.status === 'success') {
+  } else if (primaryDownload?.status === 'success') {
     rating = 'poor';
   } else {
     rating = 'insufficient_data';
@@ -1001,11 +1147,16 @@ export function assessAllActivities(
     headlineSummary += ` ⚠️ Note: Ping rises by +${inputs.loadedLatency.loadedDeltaMs} ms under load (Bufferbloat). Avoid large file transfers while gaming or on video calls.`;
   }
 
-  const dlBytes = inputs.download.bytesTransferred || 0;
-  const ulBytes = inputs.upload.bytesTransferred || 0;
+  // Calculate total bytes from all download/upload results
+  const dlBytes = inputs.download.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
+  const ulBytes = inputs.upload.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
   const dataTransferredMb = Number(
     ((dlBytes + ulBytes) / (1024 * 1024)).toFixed(2)
   );
+
+  // Calculate total duration from all tests
+  const totalDownloadDuration = inputs.download.reduce((sum, r) => sum + (r.durationMs || 0), 0);
+  const totalUploadDuration = inputs.upload.reduce((sum, r) => sum + (r.durationMs || 0), 0);
 
   return {
     id,
@@ -1021,13 +1172,13 @@ export function assessAllActivities(
       uploadThroughput: inputs.upload,
       loadedLatency: inputs.loadedLatency,
       dnsTiming: inputs.dns,
+      packetLoss: inputs.packetLoss,
+      latencyDuringUpload: inputs.latencyDuringUpload,
     },
     dataTransferredMb,
     overallRating,
     testedDurationSec: Math.round(
-      (inputs.download.durationMs +
-        inputs.upload.durationMs +
-        inputs.latency.sampleCount * 50) /
+      (totalDownloadDuration + totalUploadDuration + inputs.latency.sampleCount * 50) /
         1000
     ),
   };

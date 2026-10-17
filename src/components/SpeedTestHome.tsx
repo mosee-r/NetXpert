@@ -26,8 +26,9 @@ const PHASE_STAGE_INDEX: Partial<Record<AssessmentStage, number>> = {
   measuring_latency: 1,
   measuring_download: 2,
   measuring_upload: 2,
-  measuring_mlab: 3,
   measuring_loaded_latency: 3,
+  measuring_upload_latency: 3,
+  measuring_mlab: 4,
   evaluating_activities: 4,
   complete: 5,
 };
@@ -153,6 +154,15 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     : phase === 'upload'
     ? activeMetrics.uploadMbps ?? null
     : null;
+  // Helper to get primary (last/largest) throughput from array
+  const getPrimaryThroughput = (results: any[] | undefined) => {
+    if (!results || results.length === 0) return null;
+    return results[results.length - 1] || results[0];
+  };
+
+  const primaryDownload = getPrimaryThroughput(report?.rawMeasurements.downloadThroughput);
+  const primaryUpload = getPrimaryThroughput(report?.rawMeasurements.uploadThroughput);
+
   const metrics = isTesting
     ? {
         downloadMbps: activeMetrics.downloadMbps ?? null,
@@ -160,13 +170,17 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
         idleLatencyMs: activeMetrics.pingMs ?? null,
         loadedLatencyMs: activeMetrics.loadedPingMs ?? null,
         jitterMs: activeMetrics.jitterMs ?? null,
+        packetLossPercent: null,
+        uploadLatencyMs: null,
       }
     : {
-        downloadMbps: report?.rawMeasurements.downloadThroughput.mbps ?? null,
-        uploadMbps: report?.rawMeasurements.uploadThroughput.mbps ?? null,
+        downloadMbps: primaryDownload?.mbps ?? null,
+        uploadMbps: primaryUpload?.mbps ?? null,
         idleLatencyMs: report?.rawMeasurements.idleLatency.medianMs ?? null,
         loadedLatencyMs: report?.rawMeasurements.loadedLatency.underLoadLatencyMs ?? null,
         jitterMs: report?.rawMeasurements.idleLatency.jitterMs ?? null,
+        packetLossPercent: report?.rawMeasurements.packetLoss?.packetLossPercent ?? null,
+        uploadLatencyMs: report?.rawMeasurements.latencyDuringUpload?.underLoadLatencyMs ?? null,
       };
   const liveDownloadSamples: ThroughputCardSample[] = downloadSparklineData.map((point) => ({
     timestampMs: point.elapsedMs,
@@ -176,11 +190,12 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     timestampMs: point.elapsedMs,
     mbps: point.mbps,
   }));
-  const reportDownloadSamples: ThroughputCardSample[] = (report?.rawMeasurements.downloadThroughput.samples ?? []).map(
-    ({ timestamp, instantMbps }) => ({ timestampMs: timestamp, mbps: instantMbps })
+  // Get samples from primary (last) throughput result
+  const reportDownloadSamples: ThroughputCardSample[] = (primaryDownload?.samples ?? []).map(
+    ({ timestamp, instantMbps }: { timestamp: number; instantMbps: number }) => ({ timestampMs: timestamp, mbps: instantMbps })
   );
-  const reportUploadSamples: ThroughputCardSample[] = (report?.rawMeasurements.uploadThroughput.samples ?? []).map(
-    ({ timestamp, instantMbps }) => ({ timestampMs: timestamp, mbps: instantMbps })
+  const reportUploadSamples: ThroughputCardSample[] = (primaryUpload?.samples ?? []).map(
+    ({ timestamp, instantMbps }: { timestamp: number; instantMbps: number }) => ({ timestampMs: timestamp, mbps: instantMbps })
   );
   const activePhase = isTesting
     ? stage === 'measuring_download'
@@ -224,8 +239,10 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
           : elapsedHours < 24
           ? `${elapsedHours} h ago`
           : `${elapsedDays} d ago`;
-        const download = lastReport.rawMeasurements.downloadThroughput.mbps;
-        const upload = lastReport.rawMeasurements.uploadThroughput.mbps;
+        const lastPrimaryDownload = getPrimaryThroughput(lastReport.rawMeasurements.downloadThroughput);
+        const lastPrimaryUpload = getPrimaryThroughput(lastReport.rawMeasurements.uploadThroughput);
+        const download = lastPrimaryDownload?.mbps;
+        const upload = lastPrimaryUpload?.mbps;
         return `Last test · ${download === null ? '--' : `${download.toFixed(1)} Mbps`} down / ${upload === null ? '--' : `${upload.toFixed(1)} Mbps`} up · ${age}`;
       })()
     : null;
@@ -537,12 +554,21 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                   : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
               },
               {
+                label: 'Upload Latency',
+                value: metrics.uploadLatencyMs === null ? 'Not measured' : `${metrics.uploadLatencyMs.toFixed(0)} ms`,
+                status: metrics.uploadLatencyMs === null ? undefined : metrics.uploadLatencyMs > 100 ? 'poor' : metrics.uploadLatencyMs > 50 ? 'warning' : 'good',
+              },
+              {
+                label: 'Test Server',
+                value: report.server?.name || report.networkInfo.testServer?.name || 'Not specified',
+              },
+              {
                 label: 'Public IP',
                 value: report.networkInfo.ipAddress
                   ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
                   : 'Not recorded',
               },
-              { label: 'City', value: report.networkInfo.locationCity || 'Not available' },
+              { label: 'City', value: report.networkInfo.locationCity || report.server?.city || 'Not available' },
               ...(report.networkInfo.networkType !== 'unknown'
                 ? [{ label: 'Network', value: report.networkInfo.networkType }]
                 : []),
@@ -558,6 +584,50 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             >
               {showPublicIp ? 'Hide public IP' : 'Reveal public IP'}
             </button>
+          )}
+
+          {/* Multi-size test results */}
+          {report.rawMeasurements.downloadThroughput.length > 1 && (
+            <details className="group border-b border-app-divider py-3">
+              <summary className="flex min-h-11 cursor-pointer list-none items-center justify-between gap-3 text-sm font-medium text-app-secondary outline-none marker:hidden hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+                <span>Multi-size Test Results</span>
+                <span aria-hidden="true" className="text-lg text-app-accent transition-transform group-open:rotate-45">+</span>
+              </summary>
+              <div className="space-y-4 pt-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Download (Multiple Sizes)</h4>
+                    {report.rawMeasurements.downloadThroughput.map((result, index) => (
+                      <div key={`dl-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
+                        <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
+                        <div className="text-sm font-mono">
+                          <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
+                          <span className="text-xs text-app-muted ml-1">Mbps</span>
+                        </div>
+                        {result.percentile90 && (
+                          <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <h4 className="text-xs font-semibold text-app-muted uppercase tracking-wider">Upload (Multiple Sizes)</h4>
+                    {report.rawMeasurements.uploadThroughput.map((result, index) => (
+                      <div key={`ul-${index}`} className="p-2 rounded-lg bg-app-surface border border-app-divider">
+                        <div className="text-xs text-app-muted">{result.testSizeBytes ? `${(result.testSizeBytes / (1024 * 1024)).toFixed(1)} MB` : 'Variable'}</div>
+                        <div className="text-sm font-mono">
+                          <span className="text-app-primary">{result.mbps?.toFixed(1) || 'N/A'}</span>
+                          <span className="text-xs text-app-muted ml-1">Mbps</span>
+                        </div>
+                        {result.percentile90 && (
+                          <div className="text-[10px] text-app-muted">90th: {result.percentile90.toFixed(1)} Mbps</div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </details>
           )}
 
           <details className="group border-b border-app-divider py-3">
@@ -614,8 +684,8 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                   idleLatencyMs: metrics.idleLatencyMs,
                   jitterMs: metrics.jitterMs,
                   overallRating: report.overallRating,
-                  downloadSamples: report.rawMeasurements.downloadThroughput.samples.map(
-                    ({ timestamp, instantMbps }) => ({ timestamp, instantMbps })
+                  downloadSamples: (primaryDownload?.samples ?? []).map(
+                    ({ timestamp, instantMbps }: { timestamp: number; instantMbps: number }) => ({ timestamp, instantMbps })
                   ),
                 }).catch(() => onExportError('The PNG could not be shared or exported. Try again.'));
               }}

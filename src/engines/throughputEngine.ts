@@ -4,6 +4,7 @@
  *
  * Measures actual transferred bytes over timed intervals.
  * Reports Mbps (megabits per second) and bytesTransferred accurately.
+ * Supports multi-size testing for detailed analysis.
  */
 
 import { ThroughputSummary, ThroughputSample, TestStatus } from '../types/network';
@@ -21,6 +22,21 @@ export interface ThroughputTestOptions {
     elapsedMs: number,
     sample: ThroughputSample
   ) => void;
+  testSizeBytes?: number; // For multi-size testing
+}
+
+/**
+ * Calculate percentile from a sorted array of numbers
+ */
+function calculatePercentile(sortedValues: number[], percentile: number): number {
+  if (sortedValues.length === 0) return 0;
+  if (sortedValues.length === 1) return sortedValues[0];
+  
+  const pos = (percentile / 100) * (sortedValues.length - 1);
+  const base = Math.floor(pos);
+  const rest = pos - base;
+  
+  return Number((sortedValues[base] + rest * (sortedValues[base + 1] - sortedValues[base])).toFixed(2));
 }
 
 export async function measureThroughput(
@@ -30,16 +46,17 @@ export async function measureThroughput(
     targetUrl,
     direction,
     maxBytes,
-    durationTargetMs = 4000,
+    durationTargetMs = 6000, // Increased from 4000 to 6000 for more stable results
     signal,
     onProgress,
+    testSizeBytes,
   } = options;
 
   const effectiveMaxBytes = typeof maxBytes === 'number'
     ? maxBytes
     : direction === 'download'
-      ? 8 * 1024 * 1024
-      : 4 * 1024 * 1024;
+      ? 10 * 1024 * 1024 // Increased from 8MB to 10MB
+      : 5 * 1024 * 1024; // Increased from 4MB to 5MB
 
   const hasExplicitCap = typeof maxBytes === 'number';
   const minimumStableWindowMs = Math.max(1200, durationTargetMs * 0.35);
@@ -58,7 +75,7 @@ export async function measureThroughput(
     if (direction === 'download') {
       const requestSizeBytes = hasExplicitCap
         ? effectiveMaxBytes
-        : 100 * 1024 * 1024;
+        : 100 * 1024 * 1024; // Larger initial request for streaming
       let lastSampleTime = startTime;
       let lastSampleBytes = 0;
       let continueTesting = true;
@@ -267,6 +284,20 @@ export async function measureThroughput(
     mbps = Number(((bytesTransferred * 8) / (elapsedSeconds * 1000000)).toFixed(2));
   }
 
+  // Calculate percentiles from instant Mbps samples
+  let percentile90: number | null = null;
+  let percentile95: number | null = null;
+  if (samples.length >= 2) {
+    const instantMbpsValues = samples.map((s) => s.instantMbps).filter(
+      (v): v is number => v !== null && !isNaN(v)
+    );
+    if (instantMbpsValues.length >= 2) {
+      const sorted = [...instantMbpsValues].sort((a, b) => a - b);
+      percentile90 = calculatePercentile(sorted, 90);
+      percentile95 = calculatePercentile(sorted, 95);
+    }
+  }
+
   if (status === 'success' && (mbps === null || bytesTransferred === 0)) {
     status = 'insufficient_data';
   }
@@ -282,5 +313,50 @@ export async function measureThroughput(
     samples,
     limitations,
     errorMessage,
+    testSizeBytes,
+    percentile90,
+    percentile95,
   };
+}
+
+/**
+ * Run multi-size throughput tests (100KB, 1MB, 10MB)
+ * Returns aggregate results for each size
+ */
+export async function measureMultiSizeThroughput(
+  options: Omit<ThroughputTestOptions, 'maxBytes' | 'durationTargetMs'> & {
+    sizes?: number[];
+    onSizeComplete?: (sizeLabel: string, result: ThroughputSummary) => void;
+  }
+): Promise<ThroughputSummary[]> {
+  const { sizes = [100 * 1024, 1 * 1024 * 1024, 10 * 1024 * 1024], onSizeComplete, ...baseOptions } = options;
+  
+  const results: ThroughputSummary[] = [];
+  
+  for (const sizeBytes of sizes) {
+    if (baseOptions.signal?.aborted) {
+      break;
+    }
+    
+    const sizeLabel = sizeBytes === 100 * 1024 ? '100KB' :
+                      sizeBytes === 1 * 1024 * 1024 ? '1MB' :
+                      sizeBytes === 10 * 1024 * 1024 ? '10MB' :
+                      `${Math.round(sizeBytes / (1024 * 1024) * 10) / 10}MB`;
+    
+    const result = await measureThroughput({
+      ...baseOptions,
+      maxBytes: sizeBytes,
+      durationTargetMs: undefined, // Use size-based, not time-based for multi-size
+      testSizeBytes: sizeBytes,
+    });
+    
+    results.push(result);
+    onSizeComplete?.(sizeLabel, result);
+    
+    // Small delay between tests
+    if (baseOptions.signal?.aborted) break;
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  
+  return results;
 }

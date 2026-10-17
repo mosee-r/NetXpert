@@ -7,6 +7,7 @@ import {
   LatencySummary,
   ThroughputSummary,
   LoadedLatencySummary,
+  PacketLossSummary,
   DnsTimingResult,
   DeviceNetworkInfo,
 } from './network';
@@ -78,12 +79,21 @@ export interface OverallAssessmentReport {
   activities: ActivityAssessment[];
   rawMeasurements: {
     idleLatency: LatencySummary;
-    downloadThroughput: ThroughputSummary;
-    uploadThroughput: ThroughputSummary;
+    downloadThroughput: ThroughputSummary[]; // Multi-size results
+    uploadThroughput: ThroughputSummary[]; // Multi-size results
     loadedLatency: LoadedLatencySummary;
     dnsTiming: DnsTimingResult;
+    packetLoss?: PacketLossSummary;
+    latencyDuringUpload?: LoadedLatencySummary; // Upload latency uses LoadedLatencySummary
   };
   dataTransferredMb: number;
   overallRating: ActivityRating;
   testedDurationSec: number;
+  server?: {
+    id: string;
+    name: string;
+    hostname: string;
+    city?: string;
+    country?: string;
+  };
 }

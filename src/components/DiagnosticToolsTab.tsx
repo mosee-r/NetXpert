@@ -17,7 +17,7 @@ import {
 import { measureLatency } from '../engines/latencyEngine';
 import { measureDnsTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
-import { DeviceNetworkInfo, LatencySummary, LoadedLatencySummary } from '../types/network';
+import { DeviceNetworkInfo, LoadedLatencySummary } from '../types/network';
 import { getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
 import { WifiChannelGraph, type WifiChannelNetwork } from './WifiChannelGraph';
 
@@ -113,15 +113,6 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
   const [rollingPingSamples, setRollingPingSamples] = useState<number[]>([]);
   const pingControllerRef = useRef<AbortController | null>(null);
-
-  // Standalone HTTP probe completion-rate test
-  const [dropProbeTarget, setDropProbeTarget] = useState(defaultTestEndpoints.ping);
-  const [dropProbeCount, setDropProbeCount] = useState(16);
-  const [dropProbeTimeoutMs, setDropProbeTimeoutMs] = useState(4000);
-  const [isMeasuringDropRate, setIsMeasuringDropRate] = useState(false);
-  const [dropProbeProgress, setDropProbeProgress] = useState({ completed: 0, successful: 0, failed: 0 });
-  const [dropProbeResult, setDropProbeResult] = useState<LatencySummary | null>(null);
-  const dropProbeControllerRef = useRef<AbortController | null>(null);
 
   // Tool 2: Standalone Bufferbloat Test
   const [isTestingBloat, setIsTestingBloat] = useState(false);
@@ -454,35 +445,6 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
     } finally {
       setIsPingingGateway(false);
     }
-  };
-
-  const handleRunDropRateTest = async () => {
-    const controller = new AbortController();
-    dropProbeControllerRef.current = controller;
-    setIsMeasuringDropRate(true);
-    setDropProbeResult(null);
-    setDropProbeProgress({ completed: 0, successful: 0, failed: 0 });
-    try {
-      const result = await measureLatency({
-        targetUrl: dropProbeTarget,
-        sampleCount: dropProbeCount,
-        timeoutMs: dropProbeTimeoutMs,
-        signal: controller.signal,
-        onProbeProgress: (completed, successful, failed) => {
-          setDropProbeProgress({ completed, successful, failed });
-        },
-      });
-      setDropProbeResult(result);
-    } finally {
-      if (dropProbeControllerRef.current === controller) {
-        dropProbeControllerRef.current = null;
-        setIsMeasuringDropRate(false);
-      }
-    }
-  };
-
-  const handleCancelDropRateTest = () => {
-    dropProbeControllerRef.current?.abort();
   };
 
   // Run Reachability Check
@@ -890,100 +852,6 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
               })
             )}
           </div>
-        </div>
-
-        {/* HTTP probe completion diagnostic */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2 text-cyan-400">
-              <Activity className="h-4 w-4" />
-              <h3 className="text-sm font-bold text-white">HTTP Probe Drop Rate</h3>
-            </div>
-            <button
-              onClick={isMeasuringDropRate ? handleCancelDropRateTest : handleRunDropRateTest}
-              className={`inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-50 ${
-                isMeasuringDropRate ? 'bg-rose-700 hover:bg-rose-600' : 'bg-cyan-700 hover:bg-cyan-600'
-              }`}
-            >
-              {isMeasuringDropRate ? <Square className="h-3.5 w-3.5" /> : <Play className="h-3.5 w-3.5" />}
-              <span>{isMeasuringDropRate ? 'Cancel' : 'Run test'}</span>
-            </button>
-          </div>
-          <p className="text-xs text-slate-400">
-            Counts failed HTTPS probe attempts for this endpoint. This is an application-level drop rate, not IP packet loss.
-          </p>
-          <input
-            type="url"
-            value={dropProbeTarget}
-            onChange={(event) => setDropProbeTarget(event.target.value)}
-            disabled={isMeasuringDropRate}
-            aria-label="HTTPS probe target URL"
-            className="w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-xs font-mono text-slate-200 disabled:opacity-60"
-          />
-          <div className="grid grid-cols-2 gap-3">
-            <label className="space-y-1 text-[11px] text-slate-400">
-              <span className="block">Probe count</span>
-              <select
-                value={dropProbeCount}
-                onChange={(event) => setDropProbeCount(Number(event.target.value))}
-                disabled={isMeasuringDropRate}
-                className="w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-              >
-                <option value={8}>8 probes</option>
-                <option value={16}>16 probes</option>
-                <option value={32}>32 probes</option>
-              </select>
-            </label>
-            <label className="space-y-1 text-[11px] text-slate-400">
-              <span className="block">Timeout per probe</span>
-              <select
-                value={dropProbeTimeoutMs}
-                onChange={(event) => setDropProbeTimeoutMs(Number(event.target.value))}
-                disabled={isMeasuringDropRate}
-                className="w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-1.5 text-xs text-slate-200"
-              >
-                <option value={2000}>2 seconds</option>
-                <option value={4000}>4 seconds</option>
-                <option value={8000}>8 seconds</option>
-              </select>
-            </label>
-          </div>
-          {isMeasuringDropRate && (
-            <div className="space-y-1.5" aria-live="polite">
-              <div className="flex justify-between text-[11px] text-slate-400">
-                <span>Completed probes</span>
-                <span className="tabular-nums">{dropProbeProgress.completed} / {dropProbeCount}</span>
-              </div>
-              <div className="h-1 overflow-hidden rounded-full bg-slate-800">
-                <div
-                  className="h-full bg-app-accent transition-[width]"
-                  style={{ width: `${(dropProbeProgress.completed / dropProbeCount) * 100}%` }}
-                />
-              </div>
-            </div>
-          )}
-          {dropProbeResult && (
-            <div className="space-y-2 border-t border-white/10 pt-3 text-xs" aria-live="polite">
-              <div className="flex items-baseline justify-between gap-3">
-                <span className="text-slate-300">
-                  {dropProbeResult.status === 'cancelled' ? 'Partial HTTP probe drop rate' : 'HTTP probe drop rate'}
-                </span>
-                <span className="text-lg font-semibold tabular-nums text-white">
-                  {dropProbeResult.completedProbeCount > 0
-                    ? `${((dropProbeResult.failedProbeCount / dropProbeResult.completedProbeCount) * 100).toFixed(1)}%`
-                    : 'Not available'}
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div><span className="block text-slate-400">Completed</span><span className="font-mono text-slate-200">{dropProbeResult.completedProbeCount}</span></div>
-                <div><span className="block text-slate-400">Succeeded</span><span className="font-mono text-emerald-300">{dropProbeResult.sampleCount}</span></div>
-                <div><span className="block text-slate-400">Failed</span><span className="font-mono text-rose-300">{dropProbeResult.failedProbeCount}</span></div>
-              </div>
-              <p className="text-[10px] text-slate-500">
-                HTTP/TLS, CORS, endpoint, or timeout failures can contribute. This result does not measure IP-layer packet loss.
-              </p>
-            </div>
-          )}
         </div>
 
         {/* Tool 2: Standalone Bufferbloat Diagnostic */}

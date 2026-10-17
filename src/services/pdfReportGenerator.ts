@@ -6,12 +6,19 @@
 
 import { jsPDF } from 'jspdf';
 import { OverallAssessmentReport } from '../types/scoring';
+import { ThroughputSummary, ThroughputSample } from '../types/network';
 import { getAndroidNativeBridge } from '../engines/testEndpoints';
 import { maskIpAddress } from '../utils/privacy';
 
+// Helper to get primary (last/largest) throughput from array
+function getPrimaryThroughput(results: ThroughputSummary[] | undefined): ThroughputSummary | null {
+  if (!results || results.length === 0) return null;
+  return results[results.length - 1] || results[0];
+}
+
 function drawThroughputChart(
   doc: jsPDF,
-  samples: OverallAssessmentReport['rawMeasurements']['downloadThroughput']['samples'],
+  samples: ThroughputSample[],
   x: number,
   y: number,
   width: number,
@@ -186,6 +193,8 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   y += 28;
 
   const raw = report.rawMeasurements;
+  const primaryDownload = getPrimaryThroughput(raw.downloadThroughput);
+  const primaryUpload = getPrimaryThroughput(raw.uploadThroughput);
   const formatEndpoint = (target: string) =>
     target.replace(/^https?:\/\//, '').split(/[?#]/, 1)[0].slice(0, 58);
   const mlab = report.mlabDiagnostics;
@@ -203,7 +212,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   const serverLocation = mlab?.server
     ? [mlab.server.city, mlab.server.country].filter(Boolean).join(', ') || mlab.server.hostname
     : 'Not available';
-  doc.text(`Download: ${formatEndpoint(raw.downloadThroughput.target)}  |  Upload: ${formatEndpoint(raw.uploadThroughput.target)}`.slice(0, 105), margin + 5, y + 8.5);
+  doc.text(`Download: ${formatEndpoint(primaryDownload?.target ?? 'N/A')}  |  Upload: ${formatEndpoint(primaryUpload?.target ?? 'N/A')}`.slice(0, 105), margin + 5, y + 8.5);
   doc.text(`Test server location: ${serverLocation}`.slice(0, 105), margin + 5, y + 13);
   y += serverDetailsHeight + 4;
 
@@ -217,15 +226,15 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   const metricsData = [
     {
       label: 'Download Speed',
-      val: raw.downloadThroughput.mbps !== null ? `${raw.downloadThroughput.mbps.toFixed(1)} Mbps` : '--',
-      detail: `Transferred: ${((raw.downloadThroughput.bytesTransferred || 0) / (1024 * 1024)).toFixed(1)} MB`,
-      method: raw.downloadThroughput.method,
+      val: primaryDownload?.mbps !== null && primaryDownload?.mbps !== undefined ? `${primaryDownload.mbps.toFixed(1)} Mbps` : '--',
+      detail: `Transferred: ${((primaryDownload?.bytesTransferred || 0) / (1024 * 1024)).toFixed(1)} MB`,
+      method: primaryDownload?.method ?? 'N/A',
     },
     {
       label: 'Upload Speed',
-      val: raw.uploadThroughput.mbps !== null ? `${raw.uploadThroughput.mbps.toFixed(1)} Mbps` : '--',
-      detail: `Transferred: ${((raw.uploadThroughput.bytesTransferred || 0) / (1024 * 1024)).toFixed(1)} MB`,
-      method: raw.uploadThroughput.method,
+      val: primaryUpload?.mbps !== null && primaryUpload?.mbps !== undefined ? `${primaryUpload.mbps.toFixed(1)} Mbps` : '--',
+      detail: `Transferred: ${((primaryUpload?.bytesTransferred || 0) / (1024 * 1024)).toFixed(1)} MB`,
+      method: primaryUpload?.method ?? 'N/A',
     },
     {
       label: 'Idle Ping (RTT)',
@@ -298,7 +307,7 @@ export function generatePdfReport(report: OverallAssessmentReport): jsPDF {
   doc.setTextColor(39, 215, 242);
   doc.text('Download Throughput Samples', margin, y);
   y += 3;
-  drawThroughputChart(doc, raw.downloadThroughput.samples, margin, y, contentWidth, 27);
+  drawThroughputChart(doc, primaryDownload?.samples ?? [], margin, y, contentWidth, 27);
   y += 30;
 
   // --- 5. Activity Capability & Workload Suitability Scores ---

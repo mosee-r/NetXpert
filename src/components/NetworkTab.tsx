@@ -21,12 +21,22 @@ import { getAndroidNativeBridge, isAndroidNativeApp } from '../engines/testEndpo
 interface NetworkTabProps {
   networkInfo: DeviceNetworkInfo | null;
   history: OverallAssessmentReport[];
+  useMlab: boolean;
+  setUseMlab: (enabled: boolean) => void;
   onRefreshNetworkInfo?: () => Promise<void> | void;
+}
+
+// Helper to get primary (last/largest) throughput from array
+function getPrimaryThroughput(results: any[] | undefined) {
+  if (!results || results.length === 0) return null;
+  return results[results.length - 1] || results[0];
 }
 
 export const NetworkTab: React.FC<NetworkTabProps> = ({
   networkInfo,
   history,
+  useMlab,
+  setUseMlab,
   onRefreshNetworkInfo,
 }) => {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -207,6 +217,32 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             </div>
           </div>
         )}
+      </section>
+
+      <section
+        aria-label="Extended diagnostics"
+        className="rounded-2xl border border-white/10 bg-[#0E1A2E] p-5 shadow-xl"
+      >
+        <div className="flex items-center justify-between gap-4">
+          <div className="min-w-0">
+            <h3 className="text-sm font-bold uppercase tracking-wider text-white">Extended diagnostics</h3>
+            <p className="mt-1 text-xs leading-relaxed text-slate-400">
+              Include separate M-Lab NDT7 download and upload measurements in speed tests while enabled. They use extra data and do not replace the Cloudflare result.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => setUseMlab(!useMlab)}
+            role="switch"
+            aria-checked={useMlab}
+            aria-label="Include M-Lab diagnostics in speed tests"
+            className={`relative h-6 w-11 shrink-0 cursor-pointer rounded-full p-0.5 transition-colors ${useMlab ? 'bg-cyan-500' : 'bg-slate-700'}`}
+          >
+            <span
+              className={`block h-5 w-5 rounded-full bg-white transition-transform ${useMlab ? 'translate-x-5' : 'translate-x-0'}`}
+            />
+          </button>
+        </div>
       </section>
 
       {/* 1. ISP identity from a separate public IP-to-ASN lookup */}
@@ -435,7 +471,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             <div>
               <span className="text-[10px] text-slate-400 block">DOWNLOAD</span>
               <span className="text-lg font-bold text-white">
-                {formatMetric(recentWifiRun?.rawMeasurements.downloadThroughput.mbps, 'Mbps')}
+                {formatMetric(getPrimaryThroughput(recentWifiRun?.rawMeasurements.downloadThroughput)?.mbps, 'Mbps')}
               </span>
             </div>
             <div>
@@ -461,7 +497,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             <div>
               <span className="text-[10px] text-slate-400 block">DOWNLOAD</span>
               <span className="text-lg font-bold text-white">
-                {formatMetric(recentCellularRun?.rawMeasurements.downloadThroughput.mbps, 'Mbps')}
+                {formatMetric(getPrimaryThroughput(recentCellularRun?.rawMeasurements.downloadThroughput)?.mbps, 'Mbps')}
               </span>
             </div>
             <div>

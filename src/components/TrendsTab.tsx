@@ -41,6 +41,12 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
     return item.networkInfo.networkType === filterType;
   });
 
+  // Helper to get primary throughput from array
+  const getPrimaryThroughput = (results: any[] | undefined) => {
+    if (!results || results.length === 0) return null;
+    return results[results.length - 1] || results[0];
+  };
+
   const handleExportCsv = () => {
     if (history.length === 0) return;
     const csvRows = [
@@ -48,8 +54,8 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
       ...history.map(
         (h) =>
           `${h.id},${h.timestamp},${h.networkInfo.networkType},${
-            h.rawMeasurements.downloadThroughput.mbps ?? ''
-          },${h.rawMeasurements.uploadThroughput.mbps ?? ''},${
+            getPrimaryThroughput(h.rawMeasurements.downloadThroughput)?.mbps ?? ''
+          },${getPrimaryThroughput(h.rawMeasurements.uploadThroughput)?.mbps ?? ''},${
             h.rawMeasurements.idleLatency.medianMs ?? ''
           },${h.rawMeasurements.idleLatency.jitterMs ?? ''},${
             h.rawMeasurements.loadedLatency.loadedDeltaMs ?? ''
@@ -64,16 +70,17 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
   };
 
   const handleExportPng = (report: OverallAssessmentReport) => {
+    const primaryDownload = getPrimaryThroughput(report.rawMeasurements.downloadThroughput);
     void shareOrDownloadSnapshot({
       testedAt: report.timestamp,
       networkType: report.networkInfo.networkType,
-      downloadMbps: report.rawMeasurements.downloadThroughput.mbps,
-      uploadMbps: report.rawMeasurements.uploadThroughput.mbps,
+      downloadMbps: primaryDownload?.mbps,
+      uploadMbps: getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.mbps,
       idleLatencyMs: report.rawMeasurements.idleLatency.medianMs,
       jitterMs: report.rawMeasurements.idleLatency.jitterMs,
       overallRating: report.overallRating,
-      downloadSamples: report.rawMeasurements.downloadThroughput.samples.map(
-        ({ timestamp, instantMbps }) => ({ timestamp, instantMbps })
+      downloadSamples: (primaryDownload?.samples ?? []).map(
+        ({ timestamp, instantMbps }: any) => ({ timestamp, instantMbps })
       ),
     }).catch(() => onExportError('The PNG could not be shared or exported. Try again.'));
   };
@@ -189,8 +196,10 @@ export const TrendsTab: React.FC<TrendsTabProps> = ({
         <div className="space-y-2.5">
           {filteredHistory.map((item) => {
             const isWifi = item.networkInfo.networkType === 'wifi';
-            const dl = item.rawMeasurements.downloadThroughput.mbps;
-            const ul = item.rawMeasurements.uploadThroughput.mbps;
+            const primaryDownload = getPrimaryThroughput(item.rawMeasurements.downloadThroughput);
+            const primaryUpload = getPrimaryThroughput(item.rawMeasurements.uploadThroughput);
+            const dl = primaryDownload?.mbps;
+            const ul = primaryUpload?.mbps;
             const ping = item.rawMeasurements.idleLatency.medianMs;
             const bloatGrade = item.rawMeasurements.loadedLatency.bufferbloatGrade;
 

@@ -4,17 +4,22 @@
  *
  * Coordinates guided sequential assessment with cancellation, timeouts,
  * progress updates, and deterministic activity capability scoring.
+ * 
+ * Now supports multi-size testing, packet loss measurement, and upload latency.
  */
 
 import { detectNetworkInfo } from './networkInfoEngine';
 import { measureDnsTiming } from './dnsAndHttpEngine';
 import { measureLatency } from './latencyEngine';
-import { measureThroughput } from './throughputEngine';
-import { measureLoadedLatency } from './loadedLatencyEngine';
+import { measureMultiSizeThroughput } from './throughputEngine';
+import { measureLoadedLatency, measureUploadLatency } from './loadedLatencyEngine';
 import { assessAllActivities } from '../scoring/assessActivities';
 import { MlabDiagnosticsReport, OverallAssessmentReport } from '../types/scoring';
-import { ThroughputChartPoint } from '../types/network';
-import { getDefaultTestEndpoints } from './testEndpoints';
+import { ThroughputChartPoint, ThroughputSummary, SpeedTestServer } from '../types/network';
+import {
+  getServerById,
+  getTestEndpointsForServer,
+} from './testEndpoints';
 import {
   locateNearestMlabServer,
   measureMlabThroughput,
@@ -27,8 +32,9 @@ export type AssessmentStage =
   | 'measuring_latency'
   | 'measuring_download'
   | 'measuring_upload'
-  | 'measuring_mlab'
   | 'measuring_loaded_latency'
+  | 'measuring_upload_latency'
+  | 'measuring_mlab'
   | 'evaluating_activities'
   | 'complete'
   | 'cancelled'
@@ -50,6 +56,7 @@ export interface AssessmentOptions {
   maxDownloadBytes?: number;
   maxUploadBytes?: number;
   useMlab?: boolean;
+  serverId?: string; // New: server selection
   onProgress?: (progress: AssessmentProgress) => void;
 }
 
@@ -69,10 +76,14 @@ export class AssessmentOrchestrator {
     this.abortController = new AbortController();
     const signal = this.abortController.signal;
 
-    const defaultEndpoints = getDefaultTestEndpoints();
-    const pingTarget = options.pingTarget || defaultEndpoints.ping;
-    const downloadTarget = defaultEndpoints.download;
-    const uploadTarget = defaultEndpoints.upload;
+    // Get server info
+    const serverId = options.serverId || 'jnb'; // Default to Johannesburg
+    const server = getServerById(serverId) || getServerById('jnb')!;
+    const testEndpoints = getTestEndpointsForServer(serverId);
+    
+    const pingTarget = options.pingTarget || testEndpoints.ping;
+    const downloadTarget = testEndpoints.download;
+    const uploadTarget = testEndpoints.upload;
     const dnsDomain = options.dnsDomain || '1.1.1.1';
     const useMlab = options.useMlab !== false;
 
@@ -107,6 +118,20 @@ export class AssessmentOrchestrator {
       ]);
       if (signal.aborted) throw new Error('Cancelled by user');
 
+      // Update network info with test server details
+      const updatedNetworkInfo = {
+        ...networkInfo,
+        testServer: {
+          id: server.id,
+          hostname: server.hostname,
+          name: server.name,
+          country: server.country,
+          city: server.city,
+          latitude: server.latitude,
+          longitude: server.longitude,
+        },
+      };
+
       let mlabDiagnostics: MlabDiagnosticsReport = mlabServer
         ? {
             requested: useMlab,
@@ -124,7 +149,7 @@ export class AssessmentOrchestrator {
           };
 
       // 2. Measure DNS Timing
-      notify('measuring_dns', 'Resolving DNS & testing domain setup...', 20, 25);
+      notify('measuring_dns', 'Resolving DNS & testing domain setup...', 20, 20);
       const dnsResult = await measureDnsTiming(dnsDomain, signal);
       if (signal.aborted) throw new Error('Cancelled by user');
 
@@ -133,21 +158,21 @@ export class AssessmentOrchestrator {
         'measuring_latency',
         'Measuring idle ping & round-trip jitter...',
         30,
-        35,
+        25,
         'Ping',
         '...'
       );
       const latencyResult = await measureLatency({
         targetUrl: pingTarget,
-        sampleCount: 8,
+        sampleCount: 10, // Increased from 8 for more accurate results
         timeoutMs: 3000,
         signal,
         onProgress: (idx, ms) => {
           notify(
             'measuring_latency',
-            `Pinging test target (sample ${idx}/8)...`,
-            Math.round((idx / 8) * 100),
-            35 + Math.round((idx / 8) * 15),
+            `Pinging test target (sample ${idx}/10)...`,
+            Math.round((idx / 10) * 100),
+            25 + Math.round((idx / 10) * 15),
             'Ping',
             `${ms} ms`
           );
@@ -155,71 +180,79 @@ export class AssessmentOrchestrator {
       });
       if (signal.aborted) throw new Error('Cancelled by user');
 
-      // 4. Measure the primary download on the configured endpoint (Cloudflare by default)
+      // 4. Measure multi-size download throughput
       notify(
         'measuring_download',
-        'Measuring primary download throughput...',
-        10,
-        50,
+        'Measuring download throughput (100KB, 1MB, 10MB)...',
+        0,
+        35,
         'Download',
         'Starting...'
       );
 
-      const downloadResult = await measureThroughput({
+      const downloadResults = await measureMultiSizeThroughput({
         targetUrl: downloadTarget,
         direction: 'download',
-        maxBytes: options.maxDownloadBytes,
-        durationTargetMs: 3500,
         signal,
-        onProgress: (bytes, mbps, elapsedMs, sample) => {
-          const mb = (bytes / (1024 * 1024)).toFixed(1);
+        onSizeComplete: (sizeLabel, result) => {
+          const stagePercent = 
+            sizeLabel === '100KB' ? 33 : 
+            sizeLabel === '1MB' ? 66 : 100;
+          
           notify(
             'measuring_download',
-            'Measuring download speed',
-            Math.min(100, Math.round((bytes / (8 * 1024 * 1024)) * 100)),
-            50 + Math.min(20, Math.round((bytes / (8 * 1024 * 1024)) * 20)),
+            `Download: ${sizeLabel} test`,
+            stagePercent,
+            35 + Math.round(stagePercent * 0.15),
             'Download',
-            `${mbps.toFixed(1)} Mbps`,
-            { elapsedMs, mbps: sample.instantMbps }
+            result.mbps ? `${result.mbps.toFixed(1)} Mbps` : 'Measuring...'
           );
         },
       });
+      
+      // Aggregate download results for backward compatibility
+      const primaryDownloadResult = downloadResults[downloadResults.length - 1] || downloadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
 
-      // 5. Measure the primary upload on the configured endpoint (Cloudflare by default)
+      // 5. Measure multi-size upload throughput
       notify(
         'measuring_upload',
-        'Measuring primary upload throughput...',
-        10,
-        70,
+        'Measuring upload throughput (100KB, 1MB, 5MB)...',
+        0,
+        50,
         'Upload',
         'Starting...'
       );
 
-      const uploadResult = await measureThroughput({
+      const uploadSizes = [100 * 1024, 1 * 1024 * 1024, 2 * 1024 * 1024]; // 100KB, 1MB, 2MB for upload
+      const uploadResults = await measureMultiSizeThroughput({
         targetUrl: uploadTarget,
         direction: 'upload',
-        maxBytes: options.maxUploadBytes,
-        durationTargetMs: 3000,
+        sizes: uploadSizes,
         signal,
-        onProgress: (bytes, mbps, elapsedMs, sample) => {
-          const mb = (bytes / (1024 * 1024)).toFixed(1);
+        onSizeComplete: (sizeLabel, result) => {
+          const stagePercent = 
+            sizeLabel === '100KB' ? 33 : 
+            sizeLabel === '1MB' ? 66 : 100;
+          
           notify(
             'measuring_upload',
-            'Measuring upload speed',
-            Math.min(100, Math.round((bytes / (4 * 1024 * 1024)) * 100)),
-            70 + Math.min(15, Math.round((bytes / (4 * 1024 * 1024)) * 15)),
+            `Upload: ${sizeLabel} test`,
+            stagePercent,
+            50 + Math.round(stagePercent * 0.15),
             'Upload',
-            `${mbps.toFixed(1)} Mbps`,
-            { elapsedMs, mbps: sample.instantMbps }
+            result.mbps ? `${result.mbps.toFixed(1)} Mbps` : 'Measuring...'
           );
         },
       });
+      
+      // Aggregate upload results for backward compatibility
+      const primaryUploadResult = uploadResults[uploadResults.length - 1] || uploadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
 
       // 6. Run optional M-Lab NDT7 diagnostics separately from primary throughput scoring
       if (useMlab && mlabServer) {
-        notify('measuring_mlab', 'Running separate M-Lab TCP diagnostics...', 0, 82);
+        notify('measuring_mlab', 'Running separate M-Lab TCP diagnostics...', 0, 70);
         try {
           mlabDiagnostics!.download = await measureMlabThroughput({
             server: mlabServer,
@@ -231,7 +264,7 @@ export class AssessmentOrchestrator {
                 'measuring_mlab',
                 'Collecting M-Lab download TCP metadata...',
                 20 + Math.min(30, Math.round((elapsed / 2500) * 30)),
-                82,
+                70,
                 'M-Lab TCP RTT',
                 tcpRtt === undefined ? 'Collecting' : `${tcpRtt} ms`
               );
@@ -266,7 +299,7 @@ export class AssessmentOrchestrator {
                 'measuring_mlab',
                 'Collecting M-Lab upload TCP metadata...',
                 50 + Math.min(30, Math.round((elapsed / 2500) * 30)),
-                83,
+                70,
                 'M-Lab TCP RTT',
                 tcpRtt === undefined ? 'Collecting' : `${tcpRtt} ms`
               );
@@ -291,13 +324,13 @@ export class AssessmentOrchestrator {
         if (signal.aborted) throw new Error('Cancelled by user');
       }
 
-      // 7. Measure Loaded Latency (Bufferbloat)
+      // 7. Measure Loaded Latency (Bufferbloat) - Download
       notify(
         'measuring_loaded_latency',
-        'Testing bufferbloat & latency under load...',
+        'Testing bufferbloat & latency under download load...',
         10,
-        85,
-        'Load Test',
+        75,
+        'Bufferbloat',
         'Starting...'
       );
       const loadedLatencyResult = await measureLoadedLatency({
@@ -309,15 +342,48 @@ export class AssessmentOrchestrator {
             phase === 'baseline'
               ? 'Measuring idle baseline...'
               : phase === 'under_load'
-              ? 'Transmitting load stream...'
+              ? 'Transmitting download load stream...'
               : 'Cooling down & recovering...';
 
           notify(
             'measuring_loaded_latency',
             `Bufferbloat: ${phaseLabel}`,
             phase === 'baseline' ? 25 : phase === 'under_load' ? 65 : 95,
-            85 + (phase === 'baseline' ? 3 : phase === 'under_load' ? 7 : 10),
+            75 + (phase === 'baseline' ? 3 : phase === 'under_load' ? 7 : 8),
             'Ping Under Load',
+            currentMs > 0 ? `${currentMs} ms` : 'Testing'
+          );
+        },
+      });
+      if (signal.aborted) throw new Error('Cancelled by user');
+
+      // 7.5. Measure Upload Latency
+      notify(
+        'measuring_upload_latency',
+        'Testing latency under upload load...',
+        10,
+        82,
+        'Upload Latency',
+        'Starting...'
+      );
+      const uploadLatencyResult = await measureUploadLatency({
+        pingTargetUrl: pingTarget,
+        uploadTargetUrl: uploadTarget,
+        signal,
+        onPhaseUpdate: (phase, currentMs) => {
+          const phaseLabel =
+            phase === 'baseline'
+              ? 'Measuring idle baseline...'
+              : phase === 'under_upload'
+              ? 'Transmitting upload load stream...'
+              : 'Cooling down & recovering...';
+
+          notify(
+            'measuring_upload_latency',
+            `Upload Latency: ${phaseLabel}`,
+            phase === 'baseline' ? 25 : phase === 'under_upload' ? 65 : 95,
+            82 + (phase === 'baseline' ? 3 : phase === 'under_upload' ? 6 : 6),
+            'Ping Under Upload',
             currentMs > 0 ? `${currentMs} ms` : 'Testing'
           );
         },
@@ -329,24 +395,40 @@ export class AssessmentOrchestrator {
         'evaluating_activities',
         'Scoring activity capabilities across 6 profiles...',
         50,
-        98
+        95
       );
 
       const report = assessAllActivities({
         latency: latencyResult,
-        download: downloadResult,
-        upload: uploadResult,
+        download: downloadResults,
+        upload: uploadResults,
         loadedLatency: loadedLatencyResult,
         dns: dnsResult,
-        networkInfo,
+        networkInfo: updatedNetworkInfo,
+        latencyDuringUpload: uploadLatencyResult,
       });
+      
       report.mlabDiagnostics = mlabDiagnostics;
+      
+      // Calculate total data transferred
+      const downloadBytes = downloadResults.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
+      const uploadBytes = uploadResults.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
       const mlabBytes =
         (mlabDiagnostics.download?.bytesTransferred ?? 0) +
         (mlabDiagnostics.upload?.bytesTransferred ?? 0);
+      
       report.dataTransferredMb = Number(
-        (report.dataTransferredMb + mlabBytes / (1024 * 1024)).toFixed(2)
+        ((downloadBytes + uploadBytes + mlabBytes) / (1024 * 1024)).toFixed(2)
       );
+      
+      // Add server info to report
+      report.server = {
+        id: server.id,
+        name: server.name,
+        hostname: server.hostname,
+        city: server.city,
+        country: server.country,
+      };
 
       notify('complete', 'Assessment complete!', 100, 100);
       return report;

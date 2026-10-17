@@ -23,6 +23,15 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
   const { rawMeasurements, networkInfo, dataTransferredMb } = report;
   const { idleLatency, downloadThroughput, uploadThroughput, loadedLatency, dnsTiming } =
     rawMeasurements;
+  
+  // Helper to get primary (last/largest) throughput from array
+  const getPrimaryThroughput = (results: any[] | undefined) => {
+    if (!results || results.length === 0) return null;
+    return results[results.length - 1] || results[0];
+  };
+  
+  const primaryDownload = getPrimaryThroughput(downloadThroughput);
+  const primaryUpload = getPrimaryThroughput(uploadThroughput);
 
   const baseMs = loadedLatency.baselineLatencyMs ?? idleLatency.medianMs ?? 0;
   const loadedMs = loadedLatency.underLoadLatencyMs ?? (baseMs + (loadedLatency.loadedDeltaMs ?? 0));
@@ -152,10 +161,10 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
             <span>Primary Speed-Test Servers</span>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-            <div>Download endpoint: <span className="text-slate-200">{downloadThroughput.target}</span></div>
-            <div>Upload endpoint: <span className="text-slate-200">{uploadThroughput.target}</span></div>
-            <div>Download method: <span className="text-slate-200">{downloadThroughput.method}</span></div>
-            <div>Upload method: <span className="text-slate-200">{uploadThroughput.method}</span></div>
+            <div>Download endpoint: <span className="text-slate-200">{primaryDownload?.target || 'N/A'}</span></div>
+            <div>Upload endpoint: <span className="text-slate-200">{primaryUpload?.target || 'N/A'}</span></div>
+            <div>Download method: <span className="text-slate-200">{primaryDownload?.method || 'N/A'}</span></div>
+            <div>Upload method: <span className="text-slate-200">{primaryUpload?.method || 'N/A'}</span></div>
           </div>
         </div>
 
