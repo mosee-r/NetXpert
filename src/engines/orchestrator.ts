@@ -11,7 +11,7 @@
 import { detectNetworkInfo } from './networkInfoEngine';
 import { measureDnsTiming } from './dnsAndHttpEngine';
 import { measureLatency } from './latencyEngine';
-import { measureMultiSizeThroughput } from './throughputEngine';
+import { measureMultiSizeThroughput, measureThroughput } from './throughputEngine';
 import { measureLoadedLatency, measureUploadLatency } from './loadedLatencyEngine';
 import { assessAllActivities } from '../scoring/assessActivities';
 import { MlabDiagnosticsReport, OverallAssessmentReport } from '../types/scoring';
@@ -25,6 +25,9 @@ import {
   measureMlabThroughput,
 } from '../services/mlabService';
 import { DEFAULT_DNS_DOMAIN, DEFAULT_SERVER_ID } from '../config/defaults';
+
+const HIGH_BANDWIDTH_TEST_DURATION_MS = 8_000;
+const HIGH_BANDWIDTH_TEST_MAX_BYTES = 1024 * 1024 * 1024;
 
 export type AssessmentStage =
   | 'idle'
@@ -86,7 +89,7 @@ export class AssessmentOrchestrator {
     const downloadTarget = testEndpoints.download;
     const uploadTarget = testEndpoints.upload;
     const dnsDomain = options.dnsDomain || DEFAULT_DNS_DOMAIN;
-    const useMlab = options.useMlab !== false;
+    const useMlab = options.useMlab === true;
 
     const notify = (
       stage: AssessmentStage,
@@ -115,7 +118,7 @@ export class AssessmentOrchestrator {
       notify('detecting_network', 'Detecting network & locating diagnostic servers...', 10, 10);
       const [networkInfo, mlabServer] = await Promise.all([
         detectNetworkInfo(),
-        locateNearestMlabServer(signal),
+        useMlab ? locateNearestMlabServer(signal) : Promise.resolve(null),
       ]);
       if (signal.aborted) throw new Error('Cancelled by user');
 
@@ -133,7 +136,9 @@ export class AssessmentOrchestrator {
         },
       };
 
-      let mlabDiagnostics: MlabDiagnosticsReport = mlabServer
+      let mlabDiagnostics: MlabDiagnosticsReport | undefined = !useMlab
+        ? undefined
+        : mlabServer
         ? {
             requested: useMlab,
             server: {
@@ -210,7 +215,43 @@ export class AssessmentOrchestrator {
           );
         },
       });
-      
+
+      notify(
+        'measuring_download',
+        'Measuring sustained download speed (8-second test)...',
+        0,
+        50,
+        'Download',
+        'Starting...'
+      );
+      const timedDownloadResult = await measureThroughput({
+        targetUrl: downloadTarget,
+        direction: 'download',
+        maxBytes: options.maxDownloadBytes ?? HIGH_BANDWIDTH_TEST_MAX_BYTES,
+        durationTargetMs: HIGH_BANDWIDTH_TEST_DURATION_MS,
+        signal,
+        onProgress: (_bytes, currentMbps, elapsedMs, sample) => {
+          const stagePercent = Math.min(99, Math.round((elapsedMs / HIGH_BANDWIDTH_TEST_DURATION_MS) * 100));
+          notify(
+            'measuring_download',
+            'Measuring sustained download speed (8-second test)...',
+            stagePercent,
+            50 + Math.round(stagePercent * 0.02),
+            'Download',
+            `${currentMbps.toFixed(1)} Mbps`,
+            { elapsedMs, mbps: sample.instantMbps }
+          );
+        },
+      });
+      if (timedDownloadResult.status === 'success') {
+        downloadResults.push(timedDownloadResult);
+      } else {
+        const fallback = downloadResults[downloadResults.length - 1];
+        const message = `The 8-second high-bandwidth download measurement failed; the fixed-size result is retained. ${timedDownloadResult.errorMessage ?? timedDownloadResult.status}`;
+        fallback?.limitations.push(message);
+        console.warn(message);
+      }
+
       // Aggregate download results for backward compatibility
       const primaryDownloadResult = downloadResults[downloadResults.length - 1] || downloadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
@@ -218,14 +259,14 @@ export class AssessmentOrchestrator {
       // 5. Measure multi-size upload throughput
       notify(
         'measuring_upload',
-        'Measuring upload throughput (100KB, 1MB, 5MB)...',
+        'Measuring upload throughput (100KB, 1MB, 10MB)...',
         0,
-        50,
+        52,
         'Upload',
         'Starting...'
       );
 
-      const uploadSizes = [100 * 1024, 1 * 1024 * 1024, 2 * 1024 * 1024]; // 100KB, 1MB, 2MB for upload
+      const uploadSizes = [100 * 1024, 1 * 1024 * 1024, 10 * 1024 * 1024];
       const uploadResults = await measureMultiSizeThroughput({
         targetUrl: uploadTarget,
         direction: 'upload',
@@ -240,13 +281,49 @@ export class AssessmentOrchestrator {
             'measuring_upload',
             `Upload: ${sizeLabel} test`,
             stagePercent,
-            50 + Math.round(stagePercent * 0.15),
+            52 + Math.round(stagePercent * 0.13),
             'Upload',
             result.mbps ? `${result.mbps.toFixed(1)} Mbps` : 'Measuring...'
           );
         },
       });
-      
+
+      notify(
+        'measuring_upload',
+        'Measuring sustained upload speed (8-second test)...',
+        0,
+        65,
+        'Upload',
+        'Starting...'
+      );
+      const timedUploadResult = await measureThroughput({
+        targetUrl: uploadTarget,
+        direction: 'upload',
+        maxBytes: options.maxUploadBytes ?? HIGH_BANDWIDTH_TEST_MAX_BYTES,
+        durationTargetMs: HIGH_BANDWIDTH_TEST_DURATION_MS,
+        signal,
+        onProgress: (_bytes, currentMbps, elapsedMs, sample) => {
+          const stagePercent = Math.min(99, Math.round((elapsedMs / HIGH_BANDWIDTH_TEST_DURATION_MS) * 100));
+          notify(
+            'measuring_upload',
+            'Measuring sustained upload speed (8-second test)...',
+            stagePercent,
+            65 + Math.round(stagePercent * 0.02),
+            'Upload',
+            `${currentMbps.toFixed(1)} Mbps`,
+            { elapsedMs, mbps: sample.instantMbps }
+          );
+        },
+      });
+      if (timedUploadResult.status === 'success') {
+        uploadResults.push(timedUploadResult);
+      } else {
+        const fallback = uploadResults[uploadResults.length - 1];
+        const message = `The 8-second high-bandwidth upload measurement failed; the fixed-size result is retained. ${timedUploadResult.errorMessage ?? timedUploadResult.status}`;
+        fallback?.limitations.push(message);
+        console.warn(message);
+      }
+
       // Aggregate upload results for backward compatibility
       const primaryUploadResult = uploadResults[uploadResults.length - 1] || uploadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
@@ -274,7 +351,7 @@ export class AssessmentOrchestrator {
         } catch (error) {
           if (signal.aborted) throw new Error('Cancelled by user');
           console.warn('M-Lab download diagnostics unavailable:', error);
-          mlabDiagnostics.download = {
+          mlabDiagnostics!.download = {
             status: 'failed',
             target: mlabServer.label,
             method: 'M-Lab ndt7 WebSocket (DOWNLOAD)',
@@ -309,7 +386,7 @@ export class AssessmentOrchestrator {
         } catch (error) {
           if (signal.aborted) throw new Error('Cancelled by user');
           console.warn('M-Lab upload diagnostics unavailable:', error);
-          mlabDiagnostics.upload = {
+          mlabDiagnostics!.upload = {
             status: 'failed',
             target: mlabServer.label,
             method: 'M-Lab ndt7 WebSocket (UPLOAD)',
@@ -395,7 +472,7 @@ export class AssessmentOrchestrator {
       notify(
         'evaluating_activities',
         'Scoring activity capabilities across 6 profiles...',
-        50,
+        52,
         95
       );
 
@@ -415,8 +492,8 @@ export class AssessmentOrchestrator {
       const downloadBytes = downloadResults.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
       const uploadBytes = uploadResults.reduce((sum, r) => sum + (r.bytesTransferred || 0), 0);
       const mlabBytes =
-        (mlabDiagnostics.download?.bytesTransferred ?? 0) +
-        (mlabDiagnostics.upload?.bytesTransferred ?? 0);
+        (mlabDiagnostics?.download?.bytesTransferred ?? 0) +
+        (mlabDiagnostics?.upload?.bytesTransferred ?? 0);
       
       report.dataTransferredMb = Number(
         ((downloadBytes + uploadBytes + mlabBytes) / (1024 * 1024)).toFixed(2)

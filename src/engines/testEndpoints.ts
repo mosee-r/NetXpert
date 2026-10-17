@@ -174,6 +174,7 @@ export interface AndroidNativeBridge {
   getGatewayAddress?(): string;
   getWifiSignalDbm?(): number;
   getWifiFrequencyMhz?(): number;
+  lookupAccessPointVendor?(oui: string): void;
   getNetworkType(): string;
   hasValidatedInternet?(): boolean;
   hasWifiNamePermission(): boolean;
@@ -228,6 +229,35 @@ export function getAndroidNativeBridge(): AndroidNativeBridge | undefined {
 
 export function isAndroidNativeApp(): boolean {
   return Boolean(getAndroidNativeBridge());
+}
+
+export function getAndroidFeatureState() {
+  const bridge = getAndroidNativeBridge();
+
+  if (!bridge) {
+    return {
+      isNativeApp: false,
+      hasPermission: false,
+      locationEnabled: false,
+      canRequestAccess: false,
+      canShowWifiScanner: false,
+    };
+  }
+
+  const hasPermission = typeof bridge.hasWifiNamePermission === 'function'
+    ? bridge.hasWifiNamePermission()
+    : false;
+  const locationEnabled = typeof bridge.isLocationEnabled === 'function'
+    ? bridge.isLocationEnabled()
+    : false;
+
+  return {
+    isNativeApp: true,
+    hasPermission,
+    locationEnabled,
+    canRequestAccess: !hasPermission || !locationEnabled,
+    canShowWifiScanner: hasPermission && locationEnabled && typeof bridge.scanWifiNetworks === 'function',
+  };
 }
 
 /**

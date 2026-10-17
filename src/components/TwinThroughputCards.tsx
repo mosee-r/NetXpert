@@ -9,6 +9,8 @@ export interface ThroughputCardSample {
 interface TwinThroughputCardsProps {
   downloadMbps: number | null;
   uploadMbps: number | null;
+  downloadMeasurementLabel?: string;
+  uploadMeasurementLabel?: string;
   downloadSamples: ThroughputCardSample[];
   uploadSamples: ThroughputCardSample[];
   activePhase: 'idle' | 'download' | 'upload' | 'completed';
@@ -140,6 +142,8 @@ const MiniSparkline: React.FC<MiniSparklineProps> = ({ samples, isActive, isWait
 export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
   downloadMbps,
   uploadMbps,
+  downloadMeasurementLabel,
+  uploadMeasurementLabel,
   downloadSamples,
   uploadSamples,
   activePhase,
@@ -150,6 +154,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       key: 'download' as const,
       label: 'Download',
       value: downloadMbps,
+      measurementLabel: downloadMeasurementLabel,
       samples: downloadSamples,
       Icon: ArrowDownToLine,
       accentColor: activePhase === 'completed' ? '#34d399' : '#06b6d4',
@@ -158,6 +163,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
       key: 'upload' as const,
       label: 'Upload',
       value: uploadMbps,
+      measurementLabel: uploadMeasurementLabel,
       samples: uploadSamples,
       Icon: ArrowUpFromLine,
       accentColor: activePhase === 'completed' ? '#34d399' : '#3b82f6',
@@ -166,7 +172,7 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
 
   return (
     <div className={`mx-auto grid w-full max-w-3xl grid-cols-2 gap-2 sm:gap-4 ${compact ? 'my-1' : 'my-4'}`}>
-      {cards.map(({ key, label, value, samples, Icon, accentColor }) => {
+      {cards.map(({ key, label, value, measurementLabel, samples, Icon, accentColor }) => {
         const isCompleted = activePhase === 'completed';
         const isActive = !isCompleted && activePhase === key;
         const isWaiting = !isCompleted && (activePhase === 'idle'
@@ -206,6 +212,10 @@ export const TwinThroughputCards: React.FC<TwinThroughputCardsProps> = ({
               </span>
               <span className="font-mono text-xs font-medium text-slate-400">Mbps</span>
             </div>
+
+            {measurementLabel && (
+              <p className="mb-1 text-[10px] leading-4 text-app-muted">{measurementLabel}</p>
+            )}
 
             <MiniSparkline samples={samples} isActive={isActive} isWaiting={isWaiting} label={label} accentColor={isCompleted ? '#34d399' : accentColor} compact={compact} />
           </article>

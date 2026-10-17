@@ -53,6 +53,20 @@ export interface RadarResponse {
   error?: string;
 }
 
+interface RadarIpEntityResponse {
+  result?: {
+    ip?: {
+      ip?: string;
+      asn?: string;
+      asnName?: string;
+      asnOrgName?: string;
+      location?: string;
+      locationName?: string;
+    };
+  };
+  errors?: { message?: string }[];
+}
+
 /**
  * Get IP information from Cloudflare Radar API
  * Requires API token from Cloudflare dashboard
@@ -70,11 +84,12 @@ export async function getIPInfoFromRadar(
   }
 
   try {
-    const url = `https://api.cloudflare.com/client/v4/radar/ip/${ip}`;
+    const url = new URL('https://api.cloudflare.com/client/v4/radar/entities/ip');
+    url.searchParams.set('ip', ip);
     const requestTimeout = createRequestTimeout(undefined, 5_000);
 
     try {
-      const res = await fetch(url, {
+      const res = await fetch(url.toString(), {
         headers: {
           Authorization: `Bearer ${config.apiToken}`,
           'Accept': 'application/json',
@@ -83,26 +98,18 @@ export async function getIPInfoFromRadar(
       });
 
       if (res.ok) {
-        const data = await res.json();
+        const data = (await res.json()) as RadarIpEntityResponse & { success?: boolean };
 
-        if (data.success && data.result) {
-          const result = data.result;
-          const location = result.location || {};
-          const asn = result.asn || {};
+        if (data.success && data.result?.ip) {
+          const result = data.result.ip;
 
           return {
             ok: true,
-            ip,
-            country: location.country?.code,
-            city: location.city,
-            region: location.region,
-            isp: result.isp,
-            asn: asn.asn?.toString(),
-            org: asn.name,
-            loc: location.latitude && location.longitude
-              ? `${location.latitude},${location.longitude}`
-              : undefined,
-            networkType: result.networkType,
+            ip: result.ip || ip,
+            country: result.location,
+            isp: result.asnOrgName,
+            asn: result.asn,
+            org: result.asnOrgName || result.asnName,
           };
         }
 
@@ -114,6 +121,8 @@ export async function getIPInfoFromRadar(
             error: data.errors[0].message || 'Radar API error',
           };
         }
+
+        return { ok: false, ip, error: 'Radar API response did not contain IP details.' };
       }
 
       return {
@@ -156,7 +165,8 @@ export async function getASNInfoFromRadar(
   }
 
   try {
-    const url = `https://api.cloudflare.com/client/v4/radar/asn/${asn}`;
+    const normalizedAsn = String(asn).replace(/^AS/i, '');
+    const url = `https://api.cloudflare.com/client/v4/radar/entities/asns/${encodeURIComponent(normalizedAsn)}`;
     const requestTimeout = createRequestTimeout(undefined, 5_000);
 
     try {
@@ -175,8 +185,8 @@ export async function getASNInfoFromRadar(
           return {
             ok: true,
             asn: String(asn),
-            name: data.result.name,
-            domain: data.result.domain,
+            name: data.result.asn?.name,
+            domain: data.result.asn?.website,
           };
         }
 

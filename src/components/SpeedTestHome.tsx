@@ -1,12 +1,11 @@
 import React, { useState } from 'react';
-import { AlertTriangle, CheckCircle2, FileText, HelpCircle, RotateCcw, Save, Share2, Trash2, X, XCircle } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, FileText, HelpCircle, RotateCcw, Save, Share2, Trash2, X, XCircle } from 'lucide-react';
 import { DeviceNetworkInfo, ThroughputChartPoint } from '../types/network';
 import { ActivityRating, OverallAssessmentReport } from '../types/scoring';
 import { AssessmentStage } from '../engines/orchestrator';
 import { ModernSpeedGauge } from './ModernSpeedGauge';
 import { KeyMetricsList } from './KeyMetricsMatrix';
 import { ThroughputCardSample, TwinThroughputCards } from './TwinThroughputCards';
-import { WorkloadSuitability } from './WorkloadSuitability';
 import { DetailedTestBreakdown } from './DetailedTestBreakdown';
 import { downloadPdfReport } from '../services/storage';
 import { shareOrDownloadSnapshot } from '../services/shareImageGenerator';
@@ -162,6 +161,8 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
 
   const primaryDownload = getPrimaryThroughput(report?.rawMeasurements.downloadThroughput);
   const primaryUpload = getPrimaryThroughput(report?.rawMeasurements.uploadThroughput);
+  const downloadMeasurements = report?.rawMeasurements.downloadThroughput ?? [];
+  const uploadMeasurements = report?.rawMeasurements.uploadThroughput ?? [];
 
   const metrics = isTesting
     ? {
@@ -281,24 +282,32 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     ? XCircle
     : HelpCircle;
   const [showPublicIp, setShowPublicIp] = useState(false);
-  const [reportView, setReportView] = useState<'simple' | 'full'>('simple');
-  const [expandedSections, setExpandedSections] = useState({
-    multiSize: false,
-    advanced: false,
-  });
-  const quickRecommendations = report
-    ? [...new Set(
-        report.activities
-          .filter((activity) => activity.rating === 'poor' || activity.rating === 'fair')
-          .flatMap((activity) => activity.recommendations)
-      )].slice(0, 3)
-    : [];
   const idleLatency = report?.rawMeasurements.loadedLatency.baselineLatencyMs
     ?? report?.rawMeasurements.idleLatency.medianMs
     ?? null;
   const loadedLatency = report?.rawMeasurements.loadedLatency.underLoadLatencyMs ?? null;
-  const latencyDelta = report?.rawMeasurements.loadedLatency.loadedDeltaMs ?? null;
-  const latencyScale = Math.max(idleLatency ?? 0, loadedLatency ?? 0, 1);
+  const uploadLoadedLatency = report?.rawMeasurements.latencyDuringUpload?.underLoadLatencyMs ?? null;
+  const downloadLatencyDifference = idleLatency !== null && loadedLatency !== null
+    ? loadedLatency - idleLatency
+    : null;
+  const uploadLatencyDifference = idleLatency !== null && uploadLoadedLatency !== null
+    ? uploadLoadedLatency - idleLatency
+    : null;
+  const latencyValues = [idleLatency, loadedLatency, uploadLoadedLatency].filter(
+    (value): value is number => value !== null
+  );
+  const latencyScale = Math.max(...latencyValues, 1);
+  const formatLatencyDifference = (value: number) =>
+    `${value > 0 ? '+' : value < 0 ? '\u2212' : ''}${Math.abs(Math.round(value))} ms vs idle`;
+  const formatTransferSize = (bytes?: number) => {
+    if (!bytes) return 'large transfer';
+    const megabytes = bytes / (1024 * 1024);
+    return megabytes < 1 ? `${Math.round(bytes / 1024)} KB` : `${megabytes.toFixed(megabytes % 1 === 0 ? 0 : 1)} MB`;
+  };
+  const formatMbps = (value: number | null | undefined) =>
+    value === null || value === undefined || !Number.isFinite(value) ? '—' : `${value.toFixed(1)} Mbps`;
+  const formatP90 = (value: number | null | undefined) =>
+    value === null || value === undefined || !Number.isFinite(value) ? 'Not enough samples' : `${value.toFixed(1)} Mbps`;
   const latencyTone = (value: number) => value < 50
     ? 'good'
     : value <= 100
@@ -450,33 +459,39 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
               <TwinThroughputCards
                 downloadMbps={metrics.downloadMbps}
                 uploadMbps={metrics.uploadMbps}
+                downloadMeasurementLabel={primaryDownload?.testSizeBytes
+                  ? `${formatTransferSize(primaryDownload.testSizeBytes)} transfer average`
+                  : '8-second timed average'}
+                uploadMeasurementLabel={primaryUpload?.testSizeBytes
+                  ? `${formatTransferSize(primaryUpload.testSizeBytes)} transfer average`
+                  : '8-second timed average'}
                 downloadSamples={downloadSamples}
                 uploadSamples={uploadSamples}
                 activePhase="completed"
                 compact
               />
 
-              <section className="border-y border-app-divider py-3" aria-label="Latency comparison under load">
+              <section className="border-y border-app-divider py-3" aria-label="Latency under network load">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-app-primary">Latency under load</h3>
-                  {latencyDelta !== null && (
-                    <span className={`inline-flex items-center gap-1.5 text-xs font-semibold ${toneClasses[deltaTone(latencyDelta)].split(' ')[1]}`}>
-                      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${toneClasses[deltaTone(latencyDelta)].split(' ')[0]}`} />
-                      +{Math.round(latencyDelta)} ms
-                    </span>
-                  )}
+                  <h3 className="text-sm font-semibold text-app-primary">Latency: idle vs loaded</h3>
                 </div>
                 {[
-                  { label: 'Idle', value: idleLatency },
-                  { label: 'Loaded', value: loadedLatency },
+                  { label: 'Idle', value: idleLatency, difference: null },
+                  { label: 'During download', value: loadedLatency, difference: downloadLatencyDifference },
+                  { label: 'During upload', value: uploadLoadedLatency, difference: uploadLatencyDifference },
                 ].map((row) => {
                   const tone = row.value === null ? 'warning' : latencyTone(row.value);
                   return (
                     <div key={row.label} className="mb-2 last:mb-0">
-                      <div className="mb-1 flex items-center justify-between text-xs">
+                      <div className="mb-1 flex items-center justify-between gap-2 text-xs">
                         <span className="text-app-secondary">{row.label}</span>
-                        <span className={`font-mono font-semibold ${toneClasses[tone].split(' ')[1]}`}>
-                          {row.value === null ? 'Not measured' : `${Math.round(row.value)} ms`}
+                        <span className="flex shrink-0 items-center gap-2">
+                          {row.difference !== null && row.difference !== undefined && (
+                            <span className="text-[10px] text-app-muted">{formatLatencyDifference(row.difference)}</span>
+                          )}
+                          <span className={`font-mono font-semibold ${toneClasses[tone].split(' ')[1]}`}>
+                            {row.value === null ? 'Not measured' : `${Math.round(row.value)} ms`}
+                          </span>
                         </span>
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-app-divider" aria-hidden="true">
@@ -488,6 +503,9 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                     </div>
                   );
                 })}
+                <p className="mt-2 text-[10px] leading-4 text-app-muted">
+                  Loaded latency uses a small number of probes. A negative difference means those samples were lower than idle samples; it is not a speed increase.
+                </p>
               </section>
             </div>
 
@@ -548,141 +566,151 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </div>
           </div>
 
-          <h3 className="text-sm font-semibold text-app-primary">Connection details</h3>
-          <KeyMetricsList
-            metrics={metrics}
-            includeThroughput={false}
-            includeLatency={false}
-            additionalRows={[
-              {
-                label: 'Jitter',
-                value: metrics.jitterMs === null ? 'Not measured' : `${metrics.jitterMs.toFixed(1)} ms`,
-                status: metrics.jitterMs === null ? undefined : metrics.jitterMs > 30 ? 'poor' : 'good',
-              },
-              {
-                label: 'DNS resolution',
-                value: report.rawMeasurements.dnsTiming.durationMs === null
-                  ? 'Not measured'
-                  : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
-              },
-              {
-                label: 'Upload Latency',
-                value: metrics.uploadLatencyMs === null ? 'Not measured' : `${metrics.uploadLatencyMs.toFixed(0)} ms`,
-                status: metrics.uploadLatencyMs === null ? undefined : metrics.uploadLatencyMs > 100 ? 'poor' : metrics.uploadLatencyMs > 50 ? 'warning' : 'good',
-              },
-              {
-                label: 'Test Server',
-                value: report.server?.name || report.networkInfo.testServer?.name || 'Not specified',
-              },
-              {
-                label: 'Public IP',
-                value: report.networkInfo.ipAddress
-                  ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
-                  : 'Not recorded',
-              },
-              { label: 'City', value: report.networkInfo.locationCity || report.server?.city || 'Not available' },
-              ...(report.networkInfo.networkType !== 'unknown'
-                ? [{ label: 'Network', value: report.networkInfo.networkType }]
-                : []),
-              { label: 'Provider', value: report.networkInfo.ispName || report.networkInfo.asnOrg || 'Not available' },
-            ]}
-          />
-          {report.networkInfo.ipAddress && (
-            <button
-              type="button"
-              onClick={() => setShowPublicIp((visible) => !visible)}
-              className="-mt-3 min-h-11 self-start text-xs font-medium text-app-accent-text hover:text-app-primary"
-              aria-pressed={showPublicIp}
-            >
-              {showPublicIp ? 'Hide public IP' : 'Reveal public IP'}
-            </button>
-          )}
-
-          <div className="flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => setReportView('simple')}
-              className={`report-toggle inline-flex min-h-10 items-center justify-center rounded-full px-3 text-xs font-semibold transition-all ${
-                reportView === 'simple'
-                  ? 'report-toggle-active'
-                  : 'border-app-divider bg-app-surface/70 text-app-secondary hover:text-app-primary'
-              }`}
-            >
-              Simple report
-            </button>
-            <button
-              type="button"
-              onClick={() => setReportView('full')}
-              className={`report-toggle inline-flex min-h-10 items-center justify-center rounded-full px-3 text-xs font-semibold transition-all ${
-                reportView === 'full'
-                  ? 'report-toggle-active'
-                  : 'border-app-divider bg-app-surface/70 text-app-secondary hover:text-app-primary'
-              }`}
-            >
-              Full report
-            </button>
-          </div>
-
-          {reportView === 'simple' ? (
-            <div className="space-y-4">
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="metric-card ai-glow rounded-2xl p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Download</div>
-                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.downloadMbps === null ? '—' : `${metrics.downloadMbps.toFixed(1)} Mbps`}</div>
-                </div>
-                <div className="metric-card ai-glow rounded-2xl p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Upload</div>
-                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.uploadMbps === null ? '—' : `${metrics.uploadMbps.toFixed(1)} Mbps`}</div>
-                </div>
-                <div className="metric-card ai-glow rounded-2xl p-3">
-                  <div className="text-[10px] uppercase tracking-[0.18em] text-app-muted">Ping</div>
-                  <div className="mt-1 font-mono text-xl font-semibold text-app-primary">{metrics.idleLatencyMs === null ? '—' : `${Math.round(metrics.idleLatencyMs)} ms`}</div>
-                </div>
+          <details
+            className="group rounded-xl border border-app-divider bg-app-surface/50"
+            aria-label="Throughput by transfer size"
+          >
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-app-primary outline-none transition-colors hover:bg-app-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent sm:px-4 [&::-webkit-details-marker]:hidden">
+              <span>Throughput by transfer size</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-app-accent-text transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="border-t border-app-divider p-3 sm:p-4">
+              <p className="mb-2 text-[10px] leading-4 text-app-muted">
+                Each average is a separate fixed-size transfer. P90 is the 90th percentile of sampled speed windows, not the sustained rate.
+              </p>
+              <div className="grid grid-cols-[minmax(4.5rem,0.7fr)_1fr_1fr] gap-x-2 text-[10px] sm:gap-x-4 sm:text-xs">
+                <span className="py-2 font-medium text-app-muted">Transfer</span>
+                <span className="py-2 font-medium text-app-secondary">Download</span>
+                <span className="py-2 font-medium text-app-secondary">Upload</span>
+                {downloadMeasurements.slice(0, 3).map((downloadResult, index) => {
+                  const uploadResult = uploadMeasurements[index];
+                  const sizeLabel = formatTransferSize(downloadResult.testSizeBytes);
+                  return (
+                    <React.Fragment key={`${downloadResult.testSizeBytes ?? sizeLabel}-${index}`}>
+                      <span className="border-t border-app-divider py-2 font-semibold text-app-primary">{sizeLabel}</span>
+                      <span className="border-t border-app-divider py-2 font-mono tabular-nums text-app-primary">
+                        <span className="block">{formatMbps(downloadResult.mbps)}</span>
+                        <span className="mt-0.5 block text-[9px] text-app-muted sm:text-[10px]">P90 {formatP90(downloadResult.percentile90)}</span>
+                      </span>
+                      <span className="border-t border-app-divider py-2 font-mono tabular-nums text-app-primary">
+                        <span className="block">{formatMbps(uploadResult?.mbps)}</span>
+                        <span className="mt-0.5 block text-[9px] text-app-muted sm:text-[10px]">P90 {formatP90(uploadResult?.percentile90)}</span>
+                      </span>
+                    </React.Fragment>
+                  );
+                })}
               </div>
-
-              <div className="result-summary-card ai-glow rounded-2xl p-4">
-                <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-app-muted">Quick summary</div>
-                <p className="text-sm leading-6 text-app-secondary">{resultSummary}</p>
-              </div>
-
-              {quickRecommendations.length > 0 && (
-                <div className="result-summary-card ai-glow rounded-2xl p-4">
-                  <div className="mb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-app-muted">Recommended next steps</div>
-                  <ul className="space-y-2 text-sm text-app-secondary">
-                    {quickRecommendations.map((item, index) => (
-                      <li key={`${item}-${index}`} className="flex gap-2">
-                        <span aria-hidden="true" className="mt-1 h-1.5 w-1.5 rounded-full bg-cyan-400" />
-                        <span>{item}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
             </div>
-          ) : (
-            <>
-              <div className="border-b border-app-divider py-3">
+          </details>
+
+          <details className="group overflow-hidden rounded-2xl border border-app-divider bg-app-surface/50">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-app-primary outline-none transition-colors hover:bg-app-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+              <span>Connection details</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-app-accent-text transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="space-y-3 border-t border-app-divider px-3 py-3 sm:px-4">
+              <KeyMetricsList
+                metrics={metrics}
+                includeThroughput={false}
+                includeLatency={false}
+                additionalRows={[
+                  {
+                    label: 'Jitter',
+                    value: metrics.jitterMs === null ? 'Not measured' : `${metrics.jitterMs.toFixed(1)} ms`,
+                    status: metrics.jitterMs === null ? undefined : metrics.jitterMs > 30 ? 'poor' : 'good',
+                  },
+                  {
+                    label: 'DNS resolution',
+                    value: report.rawMeasurements.dnsTiming.durationMs === null
+                      ? 'Not measured'
+                      : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
+                  },
+                  {
+                    label: 'Upload Latency',
+                    value: metrics.uploadLatencyMs === null ? 'Not measured' : `${metrics.uploadLatencyMs.toFixed(0)} ms`,
+                    status: metrics.uploadLatencyMs === null ? undefined : metrics.uploadLatencyMs > 100 ? 'poor' : metrics.uploadLatencyMs > 50 ? 'warning' : 'good',
+                  },
+                  {
+                    label: 'Test Server',
+                    value: report.server?.name || report.networkInfo.testServer?.name || 'Not specified',
+                  },
+                  {
+                    label: 'Public IP',
+                    value: report.networkInfo.ipAddress
+                      ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
+                      : 'Not recorded',
+                  },
+                  { label: 'City', value: report.networkInfo.locationCity || report.server?.city || 'Not available' },
+                  ...(report.networkInfo.networkType !== 'unknown'
+                    ? [{ label: 'Network', value: report.networkInfo.networkType }]
+                    : []),
+                  { label: 'Provider', value: report.networkInfo.ispName || report.networkInfo.asnOrg || 'Not available' },
+                ]}
+              />
+              {report.networkInfo.ipAddress && (
                 <button
                   type="button"
-                  onClick={() => setExpandedSections((current) => ({ ...current, advanced: !current.advanced }))}
-                  className="flex min-h-11 w-full cursor-pointer items-center justify-between gap-3 text-left text-sm font-medium text-app-secondary outline-none transition-colors hover:text-app-primary focus-visible:ring-2 focus-visible:ring-app-accent"
-                  aria-expanded={expandedSections.advanced}
+                  onClick={() => setShowPublicIp((visible) => !visible)}
+                  className="min-h-11 text-xs font-medium text-app-accent-text hover:text-app-primary"
+                  aria-pressed={showPublicIp}
                 >
-                  <span>Advanced details</span>
-                  <span aria-hidden="true" className={`text-lg text-app-accent transition-transform ${expandedSections.advanced ? 'rotate-180' : ''}`}>
-                    ▾
-                  </span>
+                  {showPublicIp ? 'Hide public IP' : 'Reveal public IP'}
                 </button>
+              )}
+            </div>
+          </details>
 
-                {expandedSections.advanced && (
-                  <div className="space-y-5 pt-4">
-                    <WorkloadSuitability activities={report.activities} />
-                    <DetailedTestBreakdown report={report} />
-                  </div>
-                )}
-              </div>
-            </>
-          )}
+          <details className="group overflow-hidden rounded-2xl border border-app-divider bg-app-surface/50">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-app-primary outline-none transition-colors hover:bg-app-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+              <span>Diagnostic details</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-app-accent-text transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="border-t border-app-divider px-3 py-1 sm:px-4">
+              <DetailedTestBreakdown report={report} showPublicIp={showPublicIp} />
+            </div>
+          </details>
+
+          <details className="group rounded-2xl border border-app-divider bg-app-surface/50">
+            <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-app-primary outline-none transition-colors hover:bg-app-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent [&::-webkit-details-marker]:hidden">
+              <span>Export or share</span>
+              <ChevronDown className="h-4 w-4 shrink-0 text-app-accent-text transition-transform group-open:rotate-180" aria-hidden="true" />
+            </summary>
+            <div className="results-actions border-t border-app-divider p-3">
+              <button
+                onClick={() => {
+                  try {
+                    downloadPdfReport(report);
+                  } catch {
+                    onExportError('The PDF could not be exported. Check available storage and try again.');
+                  }
+                }}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-app-divider px-4 text-sm font-semibold text-app-primary transition-colors hover:bg-app-raised"
+              >
+                <FileText className="h-4 w-4" aria-hidden="true" />
+                <span>Export PDF</span>
+              </button>
+              <button
+                onClick={() => {
+                  void shareOrDownloadSnapshot({
+                    testedAt: report.timestamp,
+                    networkType: report.networkInfo.networkType,
+                    downloadMbps: metrics.downloadMbps,
+                    uploadMbps: metrics.uploadMbps,
+                    idleLatencyMs: metrics.idleLatencyMs,
+                    jitterMs: metrics.jitterMs,
+                    overallRating: report.overallRating,
+                    downloadSamples: (primaryDownload?.samples ?? []).map(
+                      ({ timestamp, instantMbps }: { timestamp: number; instantMbps: number }) => ({ timestamp, instantMbps })
+                    ),
+                  }).catch(() => onExportError('The PNG could not be shared or exported. Try again.'));
+                }}
+                className="inline-flex min-h-11 items-center gap-2 rounded-md border border-app-divider px-4 text-sm font-semibold text-app-primary transition-colors hover:bg-app-raised"
+              >
+                <Share2 className="h-4 w-4" aria-hidden="true" />
+                <span>Share PNG</span>
+              </button>
+            </div>
+          </details>
 
           <div className="results-actions pt-1">
             <button
@@ -701,42 +729,6 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                 <span>Discard result</span>
               </button>
             )}
-          </div>
-
-          <div className="results-actions">
-            <button
-              onClick={() => {
-                try {
-                  downloadPdfReport(report);
-                } catch {
-                  onExportError('The PDF could not be exported. Check available storage and try again.');
-                }
-              }}
-              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-app-divider px-4 text-sm font-semibold text-app-primary transition-colors hover:bg-app-raised"
-            >
-              <FileText className="h-4 w-4" aria-hidden="true" />
-              <span>Export PDF</span>
-            </button>
-            <button
-              onClick={() => {
-                void shareOrDownloadSnapshot({
-                  testedAt: report.timestamp,
-                  networkType: report.networkInfo.networkType,
-                  downloadMbps: metrics.downloadMbps,
-                  uploadMbps: metrics.uploadMbps,
-                  idleLatencyMs: metrics.idleLatencyMs,
-                  jitterMs: metrics.jitterMs,
-                  overallRating: report.overallRating,
-                  downloadSamples: (primaryDownload?.samples ?? []).map(
-                    ({ timestamp, instantMbps }: { timestamp: number; instantMbps: number }) => ({ timestamp, instantMbps })
-                  ),
-                }).catch(() => onExportError('The PNG could not be shared or exported. Try again.'));
-              }}
-              className="inline-flex min-h-11 items-center gap-2 rounded-md border border-app-divider px-4 text-sm font-semibold text-app-primary transition-colors hover:bg-app-raised"
-            >
-              <Share2 className="h-4 w-4" aria-hidden="true" />
-              <span>Share PNG</span>
-            </button>
           </div>
 
         </section>

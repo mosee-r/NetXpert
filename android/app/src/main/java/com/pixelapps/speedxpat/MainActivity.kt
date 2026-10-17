@@ -36,6 +36,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import android.widget.Toast
+import java.net.HttpURLConnection
+import java.net.URL
 
 private const val WEBVIEW_LOG_TAG = "SpeedXpatWebView"
 
@@ -175,6 +177,54 @@ class MainActivity : AppCompatActivity() {
                 )
             }, 250)
         }
+    }
+
+    fun lookupAccessPointVendor(oui: String) {
+        if (!oui.matches(Regex("^[0-9A-Fa-f]{6}$"))) {
+            publishAccessPointVendorResult(oui, null, "invalid")
+            return
+        }
+
+        Thread {
+            var vendor: String? = null
+            var status = "error"
+            var connection: HttpURLConnection? = null
+            try {
+                connection = URL("https://api.macvendors.com/${oui.uppercase()}").openConnection() as HttpURLConnection
+                connection.connectTimeout = 3_000
+                connection.readTimeout = 3_000
+                connection.setRequestProperty("Accept", "text/plain")
+                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
+                    vendor = connection.inputStream.bufferedReader().use { it.readText() }
+                        .trim()
+                        .take(120)
+                        .takeIf { it.isNotEmpty() }
+                    status = if (vendor == null) "not-found" else "found"
+                } else if (connection.responseCode == HttpURLConnection.HTTP_NOT_FOUND) {
+                    status = "not-found"
+                }
+            } catch (error: Exception) {
+                Log.w(WEBVIEW_LOG_TAG, "Access-point vendor lookup failed: ${error.localizedMessage}")
+            } finally {
+                connection?.disconnect()
+            }
+
+            runOnUiThread {
+                publishAccessPointVendorResult(oui.uppercase(), vendor, status)
+            }
+        }.start()
+    }
+
+    private fun publishAccessPointVendorResult(oui: String, vendor: String?, status: String) {
+        if (!::webView.isInitialized || isFinishing) return
+        val eventDetail = JSONObject()
+            .put("oui", oui)
+            .put("vendor", vendor)
+            .put("status", status)
+        webView.evaluateJavascript(
+            "window.dispatchEvent(new CustomEvent('speedxpat-access-point-vendor', { detail: $eventDetail }))",
+            null
+        )
     }
 
     override fun onDestroy() {
@@ -482,6 +532,11 @@ class MainActivity : AppCompatActivity() {
 }
 
 class SpeedXpatNativeInterface(private val context: Context) {
+    @JavascriptInterface
+    fun lookupAccessPointVendor(oui: String) {
+        (context as? MainActivity)?.lookupAccessPointVendor(oui)
+    }
+
     @JavascriptInterface
     fun getWifiSsid(): String {
         return fetchSsid(context)

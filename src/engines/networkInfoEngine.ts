@@ -12,7 +12,6 @@ import {
   getAndroidNativeBridge,
   isAndroidNativeApp,
 } from './testEndpoints';
-import { locateNearestMlabServer } from '../services/mlabService';
 import { getIPInfoFromRadar, CloudflareRadarConfig } from '../services/cloudflareRadarService';
 
 interface NetworkInformationNavigator extends Navigator {
@@ -141,13 +140,6 @@ export async function detectNetworkInfo(
   let locationCity: string | undefined;
   let locationRegion: string | undefined;
   let locationCountry: string | undefined;
-  let nearestServer: {
-    machine?: string;
-    hostname?: string;
-    city?: string;
-    country?: string;
-    label?: string;
-  } | undefined;
 
   // 0. Primary lookup: Cloudflare Trace (fastest, no auth, basic IP + country + colo)
   if (!isAndroidNativeApp()) {
@@ -269,15 +261,6 @@ export async function detectNetworkInfo(
           if (!locationCity) locationCity = data.city;
           if (!locationRegion) locationRegion = data.region;
           if (!locationCountry) locationCountry = data.country;
-          if (!nearestServer && data.nearestServer) {
-            nearestServer = {
-              machine: data.nearestServer.machine,
-              hostname: data.nearestServer.hostname,
-              city: data.nearestServer.city,
-              country: data.nearestServer.country,
-              label: data.nearestServer.label,
-            };
-          }
         }
       }
     } catch {
@@ -313,10 +296,6 @@ export async function detectNetworkInfo(
     } catch {
       // fallback
     }
-  }
-
-  if (online && !nearestServer) {
-    nearestServer = await locateNearestMlabServer() || undefined;
   }
 
   // 4. Fallback for IP if third-party providers failed
@@ -355,7 +334,6 @@ export async function detectNetworkInfo(
     locationCity,
     locationRegion,
     locationCountry,
-    nearestServer,
     wifiSsid,
     wifiBssid,
     localIpAddress,

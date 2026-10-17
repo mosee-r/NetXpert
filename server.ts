@@ -61,7 +61,7 @@ async function startServer() {
     app.use(vite.middlewares);
   }
 
-  const actualPort = await listenOnAvailablePort(DEFAULT_PORT);
+  const actualPort = await listenOnAvailablePort(Number(process.env.PORT) || DEFAULT_PORT);
   console.log(`SpeedXpat server listening on port ${actualPort}`);
 }
 

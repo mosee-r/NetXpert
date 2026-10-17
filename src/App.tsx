@@ -11,7 +11,6 @@ import { NetworkTab } from './components/NetworkTab';
 import { DiagnosticToolsTab } from './components/DiagnosticToolsTab';
 import { TrendsTab } from './components/TrendsTab';
 import { SettingsModal } from './components/SettingsModal';
-import { Wifi } from 'lucide-react';
 
 import { DeviceNetworkInfo, ThroughputChartPoint } from './types/network';
 import { OverallAssessmentReport } from './types/scoring';
@@ -25,7 +24,6 @@ import {
 } from './services/storage';
 import { triggerHaptic } from './utils/haptics';
 import {
-  getAndroidNativeBridge,
   getDefaultTestEndpoints,
   isAndroidNativeApp,
 } from './engines/testEndpoints';
@@ -98,8 +96,6 @@ export default function App() {
   const [useUploadCap, setUseUploadCap] = useState(!benchmarkMode);
   const [concurrencyCount, setConcurrencyCount] = useState(4);
   const [dataSaverMode, setDataSaverMode] = useState(false);
-  const [useMlab, setUseMlab] = useState(false);
-
   const [isTesting, setIsTesting] = useState(false);
   const [isSplashActive, setIsSplashActive] = useState(true);
   const [splashFading, setSplashFading] = useState(false);
@@ -117,50 +113,6 @@ export default function App() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [appError, setAppError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
-  const [showWifiAccessPrompt, setShowWifiAccessPrompt] = useState(false);
-
-  useEffect(() => {
-    if (!isAndroidNativeApp()) return;
-
-    const promptTimer = setTimeout(() => {
-      const native = getAndroidNativeBridge();
-      if (!native) return;
-
-      try {
-        if (window.localStorage.getItem('speedxpat.wifi-access-prompt-dismissed') === 'true') return;
-      } catch (error) {
-        console.warn('Unable to read Wi-Fi access prompt preference:', error);
-      }
-
-      if (!native.hasWifiNamePermission() || !native.isLocationEnabled()) {
-        setShowWifiAccessPrompt(true);
-      }
-    }, 1050);
-
-    return () => clearTimeout(promptTimer);
-  }, []);
-
-  const dismissWifiAccessPrompt = () => {
-    try {
-      window.localStorage.setItem('speedxpat.wifi-access-prompt-dismissed', 'true');
-    } catch (error) {
-      console.warn('Unable to save Wi-Fi access prompt preference:', error);
-    }
-    setShowWifiAccessPrompt(false);
-  };
-
-  const enableWifiNameAccess = () => {
-    const native = getAndroidNativeBridge();
-    if (!native) {
-      setAppError('Wi-Fi name access is only available in the Android app.');
-      dismissWifiAccessPrompt();
-      return;
-    }
-
-    native.requestWifiNameAccess();
-    dismissWifiAccessPrompt();
-  };
-
   // Hero Gauge Counter State
   const [heroValue, setHeroValue] = useState(
     initialDownloadMbps !== null && initialDownloadMbps !== undefined
@@ -303,7 +255,6 @@ export default function App() {
       const report = await orchestrator.runAssessment({
         pingTarget,
         dnsDomain,
-        useMlab,
         maxDownloadBytes: effectiveDownloadLimitBytes,
         maxUploadBytes: effectiveUploadLimitBytes,
         onProgress: (p: AssessmentProgress) => {
@@ -492,48 +443,6 @@ export default function App() {
         </div>
       )}
 
-      {showWifiAccessPrompt && (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/80 px-5 py-8 backdrop-blur-sm">
-          <section
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="wifi-access-title"
-            aria-describedby="wifi-access-description"
-            className="w-full max-w-md rounded-3xl border border-cyan-400/20 bg-gradient-to-br from-[#11243A] to-[#0B1424] p-6 shadow-2xl shadow-black/40"
-          >
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl border border-cyan-300/20 bg-cyan-400/10 text-cyan-200">
-              <Wifi className="h-5 w-5" aria-hidden="true" />
-            </div>
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-cyan-200/70">
-              Optional device access
-            </p>
-            <h2 id="wifi-access-title" className="mt-2 text-xl font-semibold text-white">
-              Show your connected Wi-Fi
-            </h2>
-            <p id="wifi-access-description" className="mt-3 text-sm leading-6 text-slate-300">
-              Android requires Location permission and Location Services to reveal the Wi-Fi name. SpeedXpat uses this access only for network details; it does not collect GPS coordinates. You can continue without it.
-            </p>
-            <div className="mt-6 grid grid-cols-1 gap-2 sm:grid-cols-2">
-              <button
-                type="button"
-                onClick={dismissWifiAccessPrompt}
-                className="min-h-11 rounded-xl border border-white/10 bg-white/5 px-4 text-sm font-medium text-slate-300 transition-colors hover:bg-white/10"
-              >
-                Not now
-              </button>
-              <button
-                type="button"
-                autoFocus
-                onClick={enableWifiNameAccess}
-                className="min-h-11 rounded-xl bg-cyan-500 px-4 text-sm font-semibold text-slate-950 transition-colors hover:bg-cyan-400"
-              >
-                Enable Wi-Fi name
-              </button>
-            </div>
-          </section>
-        </div>
-      )}
-
       {/* 1. Top App Bar */}
       <Header
         isOnline={isOnline}
@@ -609,8 +518,6 @@ export default function App() {
           <NetworkTab
             networkInfo={networkInfo}
             history={history}
-            useMlab={useMlab}
-            setUseMlab={setUseMlab}
             onRefreshNetworkInfo={async () => {
               const info = await detectNetworkInfo(setIsOnline);
               setNetworkInfo(info);

@@ -189,10 +189,13 @@ export async function measureThroughput(
       const uploadConcurrency = 3;
       let lastSampleTime = startTime;
       let lastSampleBytes = 0;
-      let completedChunks = 0;
+      let reservedBytes = 0;
+      let nextUploadId = 0;
+      let uploadError: Error | undefined;
 
       const worker = async () => {
         while (true) {
+          if (uploadError) return;
           if (signal?.aborted) {
             status = 'cancelled';
             return;
@@ -200,33 +203,45 @@ export async function measureThroughput(
 
           const now = performance.now();
           if (now - startTime >= durationTargetMs && now - startTime >= minimumStableWindowMs) return;
-          if (hasExplicitCap && bytesTransferred >= effectiveMaxBytes) return;
+          const requestBytes = hasExplicitCap
+            ? Math.min(chunkSize, effectiveMaxBytes - bytesTransferred - reservedBytes)
+            : chunkSize;
+          if (requestBytes <= 0) return;
 
-          const uploadUrl = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}upload_t=${Date.now()}_${completedChunks}`;
+          reservedBytes += requestBytes;
+          const uploadUrl = `${targetUrl}${targetUrl.includes('?') ? '&' : '?'}upload_t=${Date.now()}_${nextUploadId++}`;
           const requestTimeout = createRequestTimeout(signal, 15_000);
           let res: Response;
 
           try {
             res = await fetch(uploadUrl, {
               method: 'POST',
-              body: chunkData,
+              body: requestBytes === chunkSize ? chunkData : chunkData.subarray(0, requestBytes),
               headers: {
                 'Content-Type': 'application/octet-stream',
               },
               cache: 'no-store',
               signal: requestTimeout.signal,
             });
+          } catch (err: unknown) {
+            if (signal?.aborted) {
+              status = 'cancelled';
+            } else {
+              uploadError ??= err instanceof Error ? err : new Error(String(err));
+            }
+            return;
           } finally {
             requestTimedOut ||= requestTimeout.didTimeout();
             requestTimeout.dispose();
+            reservedBytes -= requestBytes;
           }
 
           if (!res.ok) {
-            throw new Error(`Upload endpoint returned HTTP ${res.status}`);
+            uploadError ??= new Error(`Upload endpoint returned HTTP ${res.status}`);
+            return;
           }
 
-          bytesTransferred += chunkSize;
-          completedChunks += 1;
+          bytesTransferred += requestBytes;
           const chunkEnd = performance.now();
           const elapsedTotal = chunkEnd - startTime;
 
@@ -255,6 +270,7 @@ export async function measureThroughput(
 
       const workers = Array.from({ length: uploadConcurrency }, () => worker());
       await Promise.all(workers);
+      if (uploadError) throw uploadError;
     }
   } catch (err: unknown) {
     if (signal?.aborted) {

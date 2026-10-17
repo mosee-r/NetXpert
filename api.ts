@@ -102,26 +102,14 @@ app.get('/api/network/identity', async (_req, res) => {
   const timeoutId = setTimeout(() => controller.abort(), 8_000);
 
   try {
-    const [ipMetaRes, serverRes] = await Promise.all([
-      fetch('https://ipapi.co/json/', {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      }).catch(() => null),
-      fetch('https://locate.measurementlab.net/v2/nearest/ndt/ndt7', {
-        headers: { Accept: 'application/json' },
-        signal: controller.signal,
-      }).catch(() => null),
-    ]);
+    const ipMetaRes = await fetch('https://ipapi.co/json/', {
+      headers: { Accept: 'application/json' },
+      signal: controller.signal,
+    }).catch(() => null);
 
     let ipMeta: Record<string, any> | null = null;
     if (ipMetaRes && ipMetaRes.ok) {
       ipMeta = await ipMetaRes.json();
-    }
-
-    let nearestServer: Record<string, any> | null = null;
-    if (serverRes && serverRes.ok) {
-      const data = await serverRes.json();
-      nearestServer = data?.results?.[0] ?? null;
     }
 
     const orgStr = String(ipMeta?.org || ipMeta?.asn_org || '');
@@ -136,21 +124,10 @@ app.get('/api/network/identity', async (_req, res) => {
       isp: (isp || fallbackIsp || 'Unknown provider').trim() || 'Unknown provider',
       asn: asn || null,
       org: orgStr || null,
-      city: ipMeta?.city || nearestServer?.location?.city || null,
+      city: ipMeta?.city || null,
       region: ipMeta?.region || null,
-      country: ipMeta?.country || nearestServer?.location?.country || null,
-      nearestServer: nearestServer
-        ? {
-            machine: nearestServer.machine || null,
-            hostname: nearestServer.hostname || null,
-            city: nearestServer.location?.city || null,
-            country: nearestServer.location?.country || null,
-            label: nearestServer.location
-              ? `M-Lab ${nearestServer.location.city || 'Edge'}, ${nearestServer.location.country || ''}`
-              : nearestServer.hostname || 'M-Lab nearest server',
-          }
-        : null,
-      source: 'ipapi.co + measurementlab.net',
+      country: ipMeta?.country || null,
+      source: 'ipapi.co',
     });
   } catch {
     // fallback is handled below

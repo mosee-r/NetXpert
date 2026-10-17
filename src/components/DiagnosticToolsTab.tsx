@@ -18,7 +18,7 @@ import { measureLatency } from '../engines/latencyEngine';
 import { measureDnsTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
 import { DeviceNetworkInfo, LoadedLatencySummary } from '../types/network';
-import { getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
+import { getAndroidFeatureState, getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
 import { WifiChannelGraph, type WifiChannelNetwork } from './WifiChannelGraph';
 
 type WifiScanNetwork = WifiChannelNetwork;
@@ -107,6 +107,8 @@ interface DiagnosticToolsTabProps {
 
 export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkInfo }) => {
   const defaultTestEndpoints = getDefaultTestEndpoints();
+  const nativeFeatureState = getAndroidFeatureState();
+  const canUseWifiScan = nativeFeatureState.canShowWifiScanner;
 
   // Tool 1: Continuous Ping & Jitter Monitor
   const [isMonitoringPing, setIsMonitoringPing] = useState(false);
@@ -334,7 +336,7 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   }, []);
 
   const handleRunWifiScan = () => {
-    if (!getAndroidNativeBridge()) {
+    if (!canUseWifiScan) {
       setWifiScanMessage('Nearby Wi-Fi scanning requires the Android app; browsers do not expose Wi-Fi scan results.');
       return;
     }
@@ -343,6 +345,11 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   };
 
   const handleToggleLiveWifi = () => {
+    if (!canUseWifiScan) {
+      setWifiScanMessage('Nearby Wi-Fi scanning requires Android Location permission and active Location services.');
+      return;
+    }
+
     if (isWifiLiveRef.current) {
       isWifiLiveRef.current = false;
       setIsWifiLive(false);
@@ -480,320 +487,322 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/20 space-y-3.5 shadow-xl md:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="flex items-center space-x-2 text-cyan-400">
-              <Wifi className="w-4 h-4" />
-              <div>
-                <h3 className="text-sm font-bold text-white">Available Wi-Fi</h3>
-              <p className="text-[10px] text-slate-500">Nearby access points · identifiers stay on this device</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                onClick={handleRunWifiScan}
-                disabled={isAnalyzingWifi}
-                className="px-3 py-1.5 rounded-xl border border-white/10 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
-              >
-                {isAnalyzingWifi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
-                <span>{isAnalyzingWifi ? 'Scanning...' : 'Scan once'}</span>
-              </button>
-              <button
-                type="button"
-                onClick={handleToggleLiveWifi}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 cursor-pointer ${
-                  isWifiLive
-                    ? 'bg-rose-950/80 text-rose-300 border border-rose-800'
-                    : 'bg-cyan-600 hover:bg-cyan-500 text-white'
-                }`}
-              >
-                {isWifiLive ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
-                <span>{isWifiLive ? 'Pause live' : 'Start live'}</span>
-              </button>
-            </div>
-          </div>
-          <p className="text-xs text-slate-400">
-            Access-point list, channel spectrum, signal history, and channel ratings. Scan details, including BSSIDs, are shown locally
-            only and are not saved or sent to a service. Android controls scan frequency and may return cached results.
-          </p>
-
-          {wifiScanMessage && (
-            <div className="space-y-2">
-              <div
-                role="status"
-                className={`rounded-xl border px-3 py-2 text-xs ${
-                  wifiScanMessage.toLowerCase().includes('scan updated')
-                    ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-200'
-                    : 'border-amber-500/20 bg-amber-950/20 text-amber-200'
-                }`}
-              >
-                {wifiScanMessage}
-              </div>
-              {(wifiScanMessage.includes('Location') || wifiScanMessage.includes('permission')) && (
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => getAndroidNativeBridge()?.openApplicationSettings()}
-                    className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
-                  >
-                    App permissions
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => getAndroidNativeBridge()?.openLocationSettings()}
-                    className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
-                  >
-                    Device Location settings
-                  </button>
+        {nativeFeatureState.isNativeApp && canUseWifiScan ? (
+          <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/20 space-y-3.5 shadow-xl md:col-span-2">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center space-x-2 text-cyan-400">
+                <Wifi className="w-4 h-4" />
+                <div>
+                  <h3 className="text-sm font-bold text-white">Available Wi-Fi</h3>
+                  <p className="text-[10px] text-slate-500">Nearby access points · identifiers stay on this device</p>
                 </div>
-              )}
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleRunWifiScan}
+                  disabled={isAnalyzingWifi}
+                  className="px-3 py-1.5 rounded-xl border border-white/10 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+                >
+                  {isAnalyzingWifi ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wifi className="w-3.5 h-3.5" />}
+                  <span>{isAnalyzingWifi ? 'Scanning...' : 'Scan once'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleLiveWifi}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center space-x-1.5 cursor-pointer ${
+                    isWifiLive
+                      ? 'bg-rose-950/80 text-rose-300 border border-rose-800'
+                      : 'bg-cyan-600 hover:bg-cyan-500 text-white'
+                  }`}
+                >
+                  {isWifiLive ? <Square className="w-3 h-3 fill-current" /> : <Play className="w-3.5 h-3.5 fill-current" />}
+                  <span>{isWifiLive ? 'Pause live' : 'Start live'}</span>
+                </button>
+              </div>
             </div>
-          )}
+            <p className="text-xs text-slate-400">
+              Access-point list, channel spectrum, signal history, and channel ratings. Scan details, including BSSIDs, are shown locally
+              only and are not saved or sent to a service. Android controls scan frequency and may return cached results.
+            </p>
 
-          {wifiScanNetworks.length > 0 ? (
-            <>
-              {wifiScanTime && (
-                <p className="text-[10px] text-slate-500" role="status">
-                  Last scan: {new Date(wifiScanTime).toLocaleTimeString()}
-                  {wifiScanAgeMs !== null && wifiScanAgeMs > 0
-                    ? ` · Android data about ${Math.max(1, Math.round(wifiScanAgeMs / 1000))} sec old`
-                    : ' · fresh results'}
-                  {isWifiLive ? ' · live refresh enabled' : ''}
-                  {' · BSSIDs are not stored'}
-                </p>
-              )}
-              <div className="space-y-3 rounded-xl border border-white/5 bg-slate-900/40 p-3">
-                <div className="flex flex-wrap items-center gap-2" aria-label="Filter access points by Wi-Fi band">
-                  <span className="text-[10px] uppercase tracking-wide text-slate-500">Band</span>
-                  {wifiBandOptions.map((band) => (
+            {wifiScanMessage && (
+              <div className="space-y-2">
+                <div
+                  role="status"
+                  className={`rounded-xl border px-3 py-2 text-xs ${
+                    wifiScanMessage.toLowerCase().includes('scan updated')
+                      ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-200'
+                      : 'border-amber-500/20 bg-amber-950/20 text-amber-200'
+                  }`}
+                >
+                  {wifiScanMessage}
+                </div>
+                {(wifiScanMessage.includes('Location') || wifiScanMessage.includes('permission')) && (
+                  <div className="flex flex-wrap gap-2">
                     <button
-                      key={band}
                       type="button"
-                      aria-pressed={wifiBandFilter === band}
-                      onClick={() => setWifiBandFilter(band)}
-                      className={`rounded-lg px-2.5 py-1 text-[10px] font-semibold transition-colors ${
-                        wifiBandFilter === band
-                          ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30'
-                          : 'bg-slate-800 text-slate-400 border border-white/5 hover:text-slate-200'
-                      }`}
+                      onClick={() => getAndroidNativeBridge()?.openApplicationSettings()}
+                      className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
                     >
-                      {band}
+                      App permissions
                     </button>
-                  ))}
-                  <span className="ml-auto text-[10px] text-slate-500">
-                    {filteredWifiNetworks.length} / {wifiScanNetworks.length} networks
-                  </span>
-                </div>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                  <label className="space-y-1 text-[10px] text-slate-400">
-                    <span className="flex justify-between">
-                      <span>Minimum signal</span>
-                      <strong className="text-cyan-200">{wifiSignalThreshold} dBm</strong>
-                    </span>
-                    <input
-                      type="range"
-                      min="-100"
-                      max="-30"
-                      step="5"
-                      value={wifiSignalThreshold}
-                      onChange={(event) => setWifiSignalThreshold(Number(event.target.value))}
-                      className="w-full accent-cyan-400"
-                    />
-                  </label>
-                  <label className="space-y-1 text-[10px] text-slate-400">
-                    <span className="block">Security</span>
-                    <select
-                      value={wifiSecurityFilter}
-                      onChange={(event) => {
-                        if (isWifiSecurityFilter(event.target.value)) {
-                          setWifiSecurityFilter(event.target.value);
-                        }
-                      }}
-                      className="w-full rounded-lg border border-white/10 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200"
+                    <button
+                      type="button"
+                      onClick={() => getAndroidNativeBridge()?.openLocationSettings()}
+                      className="rounded-lg border border-white/10 bg-slate-800 px-3 py-1.5 text-[11px] text-slate-200"
                     >
-                      {WIFI_SECURITY_FILTERS.map((security) => (
-                        <option key={security} value={security}>{security}</option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <label className="inline-flex items-center gap-2 text-[10px] text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={showHiddenWifi}
-                    onChange={(event) => setShowHiddenWifi(event.target.checked)}
-                    className="accent-cyan-400"
-                  />
-                  Show hidden SSIDs
-                </label>
+                      Device Location settings
+                    </button>
+                  </div>
+                )}
               </div>
-              <div
-                role="tablist"
-                aria-label="Wi-Fi analyzer views"
-                className="grid grid-cols-2 gap-1 rounded-xl border border-white/5 bg-slate-900/70 p-1 sm:grid-cols-4"
-              >
-                {([
-                  ['access-points', 'AP list'],
-                  ['channel', 'Channel graph'],
-                  ['time', 'Time graph'],
-                  ['rating', 'Channel rating'],
-                ] as const).map(([view, label]) => (
-                  <button
-                    key={view}
-                    type="button"
-                    role="tab"
-                    aria-selected={wifiAnalyzerView === view}
-                    onClick={() => setWifiAnalyzerView(view)}
-                    className={`rounded-lg px-2 py-2 text-[11px] font-semibold ${
-                      wifiAnalyzerView === view
-                        ? 'bg-cyan-500/20 text-cyan-200'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-              {filteredWifiNetworks.length === 0 ? (
-                <p className="rounded-xl border border-white/5 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
-                  No networks match the selected filters.
-                </p>
-              ) : wifiAnalyzerView === 'access-points' ? (
-                <div className="space-y-2">
-                  {filteredWifiNetworks.map((network) => {
-                    const signalPercent = Math.max(0, Math.min(100, 2 * (network.signalDbm + 100)));
-                    const networkKey = wifiNetworkKey(network);
-                    const signalQuality =
-                      network.signalDbm >= -50 ? 'Excellent' :
-                      network.signalDbm >= -60 ? 'Good' :
-                      network.signalDbm >= -67 ? 'Fair' : 'Weak';
-                    return (
+            )}
+
+            {wifiScanNetworks.length > 0 ? (
+              <>
+                {wifiScanTime && (
+                  <p className="text-[10px] text-slate-500" role="status">
+                    Last scan: {new Date(wifiScanTime).toLocaleTimeString()}
+                    {wifiScanAgeMs !== null && wifiScanAgeMs > 0
+                      ? ` · Android data about ${Math.max(1, Math.round(wifiScanAgeMs / 1000))} sec old`
+                      : ' · fresh results'}
+                    {isWifiLive ? ' · live refresh enabled' : ''}
+                    {' · BSSIDs are not stored'}
+                  </p>
+                )}
+                <div className="space-y-3 rounded-xl border border-white/5 bg-slate-900/40 p-3">
+                  <div className="flex flex-wrap items-center gap-2" aria-label="Filter access points by Wi-Fi band">
+                    <span className="text-[10px] uppercase tracking-wide text-slate-500">Band</span>
+                    {wifiBandOptions.map((band) => (
                       <button
-                        key={networkKey}
+                        key={band}
                         type="button"
-                        aria-pressed={networkKey === selectedWifiKey}
-                        onClick={() => setSelectedWifiKey(networkKey)}
-                        className={`w-full rounded-xl border p-3 text-left transition-colors ${
-                          networkKey === selectedWifiKey
-                            ? 'border-cyan-500/40 bg-cyan-950/30'
-                            : 'border-white/5 bg-slate-900/70 hover:border-white/15'
+                        aria-pressed={wifiBandFilter === band}
+                        onClick={() => setWifiBandFilter(band)}
+                        className={`rounded-lg px-2.5 py-1 text-[10px] font-semibold transition-colors ${
+                          wifiBandFilter === band
+                            ? 'bg-cyan-500/20 text-cyan-200 border border-cyan-500/30'
+                            : 'bg-slate-800 text-slate-400 border border-white/5 hover:text-slate-200'
                         }`}
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <span className="min-w-0 break-words text-sm font-semibold text-slate-100">
-                            {network.hidden ? 'Hidden network' : network.ssid}
-                          </span>
-                          <span className="flex shrink-0 items-center gap-1.5">
-                            {connectedWifiSsid && network.ssid === connectedWifiSsid && (
-                              <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
-                                Connected
-                              </span>
-                            )}
-                            <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-200">
-                              {network.security}
-                            </span>
-                          </span>
-                        </div>
-                        <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[10px] text-slate-400">
-                          <span>{network.band} · Ch {network.channel ?? '—'} · {network.frequencyMhz} MHz</span>
-                          <span>{network.wifiStandard}</span>
-                        </div>
-                        <p className="mt-1 break-all font-mono text-[10px] text-slate-500">
-                          BSSID: {network.bssid || 'Unavailable'}
-                        </p>
-                        <div className="mt-2 flex items-center gap-2">
-                          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700">
-                            <div
-                              className={`h-full rounded-full ${
-                                network.signalDbm >= -60 ? 'bg-emerald-400' :
-                                network.signalDbm >= -70 ? 'bg-amber-400' : 'bg-rose-400'
-                              }`}
-                              style={{ width: `${signalPercent}%` }}
-                            />
-                          </div>
-                          <span className="w-28 text-right text-[10px] text-slate-300">
-                            {network.signalDbm} dBm · {signalQuality}
-                          </span>
-                        </div>
+                        {band}
                       </button>
-                    );
-                  })}
-                </div>
-              ) : wifiAnalyzerView === 'channel' || wifiAnalyzerView === 'time' ? (
-                <>
-                  {wifiAnalyzerView === 'time' && (
-                    <label className="block space-y-1 text-[10px] text-slate-400">
-                      <span>Select access point</span>
+                    ))}
+                    <span className="ml-auto text-[10px] text-slate-500">
+                      {filteredWifiNetworks.length} / {wifiScanNetworks.length} networks
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <label className="space-y-1 text-[10px] text-slate-400">
+                      <span className="flex justify-between">
+                        <span>Minimum signal</span>
+                        <strong className="text-cyan-200">{wifiSignalThreshold} dBm</strong>
+                      </span>
+                      <input
+                        type="range"
+                        min="-100"
+                        max="-30"
+                        step="5"
+                        value={wifiSignalThreshold}
+                        onChange={(event) => setWifiSignalThreshold(Number(event.target.value))}
+                        className="w-full accent-cyan-400"
+                      />
+                    </label>
+                    <label className="space-y-1 text-[10px] text-slate-400">
+                      <span className="block">Security</span>
                       <select
-                        value={activeWifiKey || ''}
-                        onChange={(event) => setSelectedWifiKey(event.target.value)}
-                        className="w-full rounded-lg border border-white/10 bg-slate-800 px-2.5 py-2 text-xs text-slate-200"
+                        value={wifiSecurityFilter}
+                        onChange={(event) => {
+                          if (isWifiSecurityFilter(event.target.value)) {
+                            setWifiSecurityFilter(event.target.value);
+                          }
+                        }}
+                        className="w-full rounded-lg border border-white/10 bg-slate-800 px-2.5 py-1.5 text-xs text-slate-200"
                       >
-                        {filteredWifiNetworks.map((network) => {
-                          const key = wifiNetworkKey(network);
-                          return (
-                            <option key={key} value={key}>
-                              {network.hidden ? 'Hidden network' : network.ssid} · Ch {network.channel ?? '—'} · {network.bssid}
-                            </option>
-                          );
-                        })}
+                        {WIFI_SECURITY_FILTERS.map((security) => (
+                          <option key={security} value={security}>{security}</option>
+                        ))}
                       </select>
                     </label>
-                  )}
-                  <WifiChannelGraph
-                    mode={wifiAnalyzerView}
-                    networks={filteredWifiNetworks}
-                    selectedKey={activeWifiKey}
-                    onSelect={(network) => setSelectedWifiKey(wifiNetworkKey(network))}
-                    selectedSsid={activeWifiNetwork?.hidden ? 'Hidden network' : activeWifiNetwork?.ssid}
-                    signalHistory={activeWifiHistory?.readings}
-                    lastScanAt={wifiScanTime}
-                  />
-                  {wifiAnalyzerView === 'channel' && channelUsage.length > 0 && (
-                    <div className="rounded-xl border border-white/5 bg-slate-900/50 p-3">
-                      <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
-                        Access points per channel · {wifiBandFilter}
-                      </p>
-                      <div className="flex flex-wrap gap-2">
-                        {channelUsage.map(([channel, count]) => (
-                          <span key={channel} className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300">
-                            {channel}: <strong className="text-cyan-200">{count}</strong>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-[10px] text-slate-500">
-                    Estimated from visible networks, signal strength, and channel-width metadata; nearby hidden or non-Wi-Fi interference is not measured.
-                  </p>
-                  {channelRatings.map((entry) => (
-                    <div
-                      key={`${entry.band}-${entry.channel}`}
-                      className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-slate-900/70 px-3 py-2.5"
+                  </div>
+                  <label className="inline-flex items-center gap-2 text-[10px] text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={showHiddenWifi}
+                      onChange={(event) => setShowHiddenWifi(event.target.checked)}
+                      className="accent-cyan-400"
+                    />
+                    Show hidden SSIDs
+                  </label>
+                </div>
+                <div
+                  role="tablist"
+                  aria-label="Wi-Fi analyzer views"
+                  className="grid grid-cols-2 gap-1 rounded-xl border border-white/5 bg-slate-900/70 p-1 sm:grid-cols-4"
+                >
+                  {([
+                    ['access-points', 'AP list'],
+                    ['channel', 'Channel graph'],
+                    ['time', 'Time graph'],
+                    ['rating', 'Channel rating'],
+                  ] as const).map(([view, label]) => (
+                    <button
+                      key={view}
+                      type="button"
+                      role="tab"
+                      aria-selected={wifiAnalyzerView === view}
+                      onClick={() => setWifiAnalyzerView(view)}
+                      className={`rounded-lg px-2 py-2 text-[11px] font-semibold ${
+                        wifiAnalyzerView === view
+                          ? 'bg-cyan-500/20 text-cyan-200'
+                          : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                      }`}
                     >
-                      <span className="text-xs text-slate-200">{entry.band} · Ch {entry.channel}</span>
-                      <span className="text-[10px] text-slate-400">{entry.networks} overlapping APs</span>
-                      <span className={`text-[10px] font-semibold ${
-                        entry.rating === 'Clear' ? 'text-emerald-300' :
-                        entry.rating === 'Fair' ? 'text-amber-300' : 'text-rose-300'
-                      }`}>
-                        {entry.rating}
-                      </span>
-                    </div>
+                      {label}
+                    </button>
                   ))}
                 </div>
-              )}
-            </>
-          ) : !wifiScanMessage && (
-            <div className="rounded-xl border border-white/5 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
-              Nearby scans require the Android app, Wi-Fi enabled, Location permission granted, and Location services on.
-            </div>
-          )}
-        </div>
+                {filteredWifiNetworks.length === 0 ? (
+                  <p className="rounded-xl border border-white/5 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
+                    No networks match the selected filters.
+                  </p>
+                ) : wifiAnalyzerView === 'access-points' ? (
+                  <div className="space-y-2">
+                    {filteredWifiNetworks.map((network) => {
+                      const signalPercent = Math.max(0, Math.min(100, 2 * (network.signalDbm + 100)));
+                      const networkKey = wifiNetworkKey(network);
+                      const signalQuality =
+                        network.signalDbm >= -50 ? 'Excellent' :
+                        network.signalDbm >= -60 ? 'Good' :
+                        network.signalDbm >= -67 ? 'Fair' : 'Weak';
+                      return (
+                        <button
+                          key={networkKey}
+                          type="button"
+                          aria-pressed={networkKey === selectedWifiKey}
+                          onClick={() => setSelectedWifiKey(networkKey)}
+                          className={`w-full rounded-xl border p-3 text-left transition-colors ${
+                            networkKey === selectedWifiKey
+                              ? 'border-cyan-500/40 bg-cyan-950/30'
+                              : 'border-white/5 bg-slate-900/70 hover:border-white/15'
+                          }`}
+                        >
+                          <div className="flex items-start justify-between gap-2">
+                            <span className="min-w-0 break-words text-sm font-semibold text-slate-100">
+                              {network.hidden ? 'Hidden network' : network.ssid}
+                            </span>
+                            <span className="flex shrink-0 items-center gap-1.5">
+                              {connectedWifiSsid && network.ssid === connectedWifiSsid && (
+                                <span className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-200">
+                                  Connected
+                                </span>
+                              )}
+                              <span className="rounded bg-slate-800 px-2 py-0.5 text-[10px] text-cyan-200">
+                                {network.security}
+                              </span>
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap justify-between gap-x-3 gap-y-1 text-[10px] text-slate-400">
+                            <span>{network.band} · Ch {network.channel ?? '—'} · {network.frequencyMhz} MHz</span>
+                            <span>{network.wifiStandard}</span>
+                          </div>
+                          <p className="mt-1 break-all font-mono text-[10px] text-slate-500">
+                            BSSID: {network.bssid || 'Unavailable'}
+                          </p>
+                          <div className="mt-2 flex items-center gap-2">
+                            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-700">
+                              <div
+                                className={`h-full rounded-full ${
+                                  network.signalDbm >= -60 ? 'bg-emerald-400' :
+                                  network.signalDbm >= -70 ? 'bg-amber-400' : 'bg-rose-400'
+                                }`}
+                                style={{ width: `${signalPercent}%` }}
+                              />
+                            </div>
+                            <span className="w-28 text-right text-[10px] text-slate-300">
+                              {network.signalDbm} dBm · {signalQuality}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                ) : wifiAnalyzerView === 'channel' || wifiAnalyzerView === 'time' ? (
+                  <>
+                    {wifiAnalyzerView === 'time' && (
+                      <label className="block space-y-1 text-[10px] text-slate-400">
+                        <span>Select access point</span>
+                        <select
+                          value={activeWifiKey || ''}
+                          onChange={(event) => setSelectedWifiKey(event.target.value)}
+                          className="w-full rounded-lg border border-white/10 bg-slate-800 px-2.5 py-2 text-xs text-slate-200"
+                        >
+                          {filteredWifiNetworks.map((network) => {
+                            const key = wifiNetworkKey(network);
+                            return (
+                              <option key={key} value={key}>
+                                {network.hidden ? 'Hidden network' : network.ssid} · Ch {network.channel ?? '—'} · {network.bssid}
+                              </option>
+                            );
+                          })}
+                        </select>
+                      </label>
+                    )}
+                    <WifiChannelGraph
+                      mode={wifiAnalyzerView}
+                      networks={filteredWifiNetworks}
+                      selectedKey={activeWifiKey}
+                      onSelect={(network) => setSelectedWifiKey(wifiNetworkKey(network))}
+                      selectedSsid={activeWifiNetwork?.hidden ? 'Hidden network' : activeWifiNetwork?.ssid}
+                      signalHistory={activeWifiHistory?.readings}
+                      lastScanAt={wifiScanTime}
+                    />
+                    {wifiAnalyzerView === 'channel' && channelUsage.length > 0 && (
+                      <div className="rounded-xl border border-white/5 bg-slate-900/50 p-3">
+                        <p className="mb-2 text-[10px] uppercase tracking-wide text-slate-400">
+                          Access points per channel · {wifiBandFilter}
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          {channelUsage.map(([channel, count]) => (
+                            <span key={channel} className="rounded-lg bg-slate-800 px-2.5 py-1 text-[10px] text-slate-300">
+                              {channel}: <strong className="text-cyan-200">{count}</strong>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="text-[10px] text-slate-500">
+                      Estimated from visible networks, signal strength, and channel-width metadata; nearby hidden or non-Wi-Fi interference is not measured.
+                    </p>
+                    {channelRatings.map((entry) => (
+                      <div
+                        key={`${entry.band}-${entry.channel}`}
+                        className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-slate-900/70 px-3 py-2.5"
+                      >
+                        <span className="text-xs text-slate-200">{entry.band} · Ch {entry.channel}</span>
+                        <span className="text-[10px] text-slate-400">{entry.networks} overlapping APs</span>
+                        <span className={`text-[10px] font-semibold ${
+                          entry.rating === 'Clear' ? 'text-emerald-300' :
+                          entry.rating === 'Fair' ? 'text-amber-300' : 'text-rose-300'
+                        }`}>
+                          {entry.rating}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : !wifiScanMessage && (
+              <div className="rounded-xl border border-white/5 bg-slate-900/40 p-4 text-center text-xs text-slate-500">
+                Nearby scans require the Android app, Wi-Fi enabled, Location permission granted, and Location services on.
+              </div>
+            )}
+          </div>
+        ) : null}
 
         {/* Tool 1: Continuous Ping & Jitter Monitor */}
         <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">

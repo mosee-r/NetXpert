@@ -17,6 +17,10 @@ export interface MlabServerInfo {
   label: string;
 }
 
+export interface MlabLocateOptions {
+  throwOnError?: boolean;
+}
+
 let cachedServer: MlabServerInfo | null = null;
 let cachedTimestamp = 0;
 
@@ -24,7 +28,8 @@ let cachedTimestamp = 0;
  * Query M-Lab Locate API v2 for nearest high-capacity measurement servers
  */
 export async function locateNearestMlabServer(
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  options?: MlabLocateOptions
 ): Promise<MlabServerInfo | null> {
   // Use cached server if within last 5 minutes
   if (cachedServer && Date.now() - cachedTimestamp < 300000) {
@@ -72,6 +77,9 @@ export async function locateNearestMlabServer(
     return serverInfo;
   } catch (err) {
     console.warn('M-Lab Locate failed, falling back to local diagnostic server:', err);
+    if (options?.throwOnError) {
+      throw err;
+    }
     return null;
   }
 

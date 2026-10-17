@@ -12,13 +12,16 @@ import {
   HardDriveDownload,
   Upload,
 } from 'lucide-react';
+import { maskIpAddress } from '../utils/privacy';
 
 interface DetailedTestBreakdownProps {
   report: OverallAssessmentReport;
+  showPublicIp?: boolean;
 }
 
 export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
   report,
+  showPublicIp = false,
 }) => {
   const { rawMeasurements, networkInfo, dataTransferredMb } = report;
   const { idleLatency, downloadThroughput, uploadThroughput, loadedLatency, dnsTiming } =
@@ -32,6 +35,11 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
   
   const primaryDownload = getPrimaryThroughput(downloadThroughput);
   const primaryUpload = getPrimaryThroughput(uploadThroughput);
+  const publicIp = networkInfo.ipAddress
+    ? showPublicIp
+      ? networkInfo.ipAddress
+      : maskIpAddress(networkInfo.ipAddress)
+    : 'Not recorded';
 
   const baseMs = loadedLatency.baselineLatencyMs ?? idleLatency.medianMs ?? 0;
   const loadedMs = loadedLatency.underLoadLatencyMs ?? (baseMs + (loadedLatency.loadedDeltaMs ?? 0));
@@ -179,7 +187,7 @@ export const DetailedTestBreakdown: React.FC<DetailedTestBreakdownProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
             <div>ISP provider: <span className="text-emerald-300">{networkInfo.ispName || networkInfo.asnOrg || 'Not available'}</span></div>
             <div>ASN: <span className="text-slate-200">{networkInfo.asn || 'Not available'}</span></div>
-            <div>Public IP: <span className="text-cyan-300">{networkInfo.ipAddress || 'Not recorded'}</span></div>
+            <div>Public IP: <span className="text-cyan-300">{publicIp}</span></div>
             <div>ISP region: <span className="text-slate-200">{[networkInfo.locationCity, networkInfo.locationCountry].filter(Boolean).join(', ') || 'Not available'}</span></div>
           </div>
         </div>
