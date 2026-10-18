@@ -1,5 +1,5 @@
 export const APP_DEFAULTS = {
-  serverId: 'jnb',
+  serverId: 'auto',
   dnsDomain: '1.1.1.1',
   port: 3000,
   cloudflareHost: 'speed.cloudflare.com',

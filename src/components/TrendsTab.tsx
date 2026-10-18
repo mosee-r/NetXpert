@@ -5,16 +5,13 @@ import {
   DownloadCloud,
   FileText,
   Trash2,
-  Filter,
   Wifi,
   Radio,
   Clock,
   ChevronRight,
-  Gauge,
-  Sparkles,
   Share2,
 } from 'lucide-react';
-import { exportReportToCsv, downloadFile, downloadPdfReport } from '../services/storage';
+import { downloadFile, downloadPdfReport } from '../services/storage';
 import { shareOrDownloadSnapshot } from '../services/shareImageGenerator';
 
 interface TrendsTabProps {

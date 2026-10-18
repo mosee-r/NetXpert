@@ -38,8 +38,24 @@ import androidx.core.content.ContextCompat
 import android.widget.Toast
 import java.net.HttpURLConnection
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 private const val WEBVIEW_LOG_TAG = "SpeedXpatWebView"
+private val nativePingTimeRegex = Regex("time[=<]\\s*([0-9]+(?:\\.[0-9]+)?)\\s*ms", RegexOption.IGNORE_CASE)
+private val nativePingBytesRegex = Regex("(\\d+)\\s+bytes from", RegexOption.IGNORE_CASE)
+private val nativePingTtlRegex = Regex("ttl[= ](\\d+)", RegexOption.IGNORE_CASE)
+
+private fun isValidNativePingHost(host: String): Boolean {
+    if (host.isBlank() || host.length > 253 || host.startsWith("-")) return false
+    if (host.contains(':')) return host.matches(Regex("^[0-9A-Fa-f:]+$"))
+    val normalizedHost = host.removeSuffix(".")
+    return normalizedHost.isNotEmpty() && normalizedHost.split('.').all { label ->
+        label.length in 1..63 &&
+            label.first().isLetterOrDigit() &&
+            label.last().isLetterOrDigit() &&
+            label.all { it.isLetterOrDigit() || it == '-' }
+    }
+}
 
 class MainActivity : AppCompatActivity() {
     private lateinit var webView: WebView
@@ -215,6 +231,132 @@ class MainActivity : AppCompatActivity() {
         }.start()
     }
 
+    fun runNativePing(host: String, count: Int, payloadSize: Int, requestId: String): Boolean {
+        val targetHost = host.trim()
+        if (!isValidNativePingHost(targetHost) || count !in 1..10 || payloadSize !in 8..1400 ||
+            !requestId.matches(Regex("^[A-Za-z0-9_-]{1,80}$"))
+        ) {
+            return false
+        }
+
+        Thread({
+            var process: Process? = null
+            val samples = mutableListOf<Double>()
+            var outputDetail: String? = null
+            try {
+                for (sequence in 1..count) {
+                    val probeStartedAt = SystemClock.elapsedRealtime()
+                    val pingProcess = ProcessBuilder(
+                        "/system/bin/ping",
+                        "-c", "1",
+                        "-s", payloadSize.toString(),
+                        "-W", "1",
+                        targetHost
+                    ).redirectErrorStream(true).start()
+                    process = pingProcess
+                    val finished = pingProcess.waitFor(2, TimeUnit.SECONDS)
+                    if (!finished) {
+                        pingProcess.destroyForcibly()
+                        pingProcess.waitFor(1, TimeUnit.SECONDS)
+                    }
+                    val output = pingProcess.inputStream.bufferedReader().use { it.readText() }
+                    process = null
+                    outputDetail = output.lineSequence().lastOrNull { it.isNotBlank() }
+                        ?.trim()
+                        ?.take(180)
+
+                    val rttMs = nativePingTimeRegex.find(output)
+                        ?.groupValues?.getOrNull(1)?.toDoubleOrNull()
+                    val line = if (rttMs != null) {
+                        samples.add(rttMs)
+                        val bytes = nativePingBytesRegex.find(output)
+                            ?.groupValues?.getOrNull(1)?.toIntOrNull() ?: payloadSize + 8
+                        val ttl = nativePingTtlRegex.find(output)
+                            ?.groupValues?.getOrNull(1)?.toIntOrNull()
+                        "Reply from $targetHost: bytes=$bytes time=${"%.1f".format(java.util.Locale.US, rttMs)}ms${ttl?.let { " TTL=$it" } ?: ""}"
+                    } else {
+                        if (output.contains("unreachable", ignoreCase = true)) {
+                            "Reply from $targetHost: Destination host unreachable."
+                        } else {
+                            "Request timed out."
+                        }
+                    }
+
+                    publishNativePingResult(
+                        JSONObject()
+                            .put("type", "progress")
+                            .put("requestId", requestId)
+                            .put("host", targetHost)
+                            .put("count", count)
+                            .put("payloadSize", payloadSize)
+                            .put("sent", sequence)
+                            .put("received", samples.size)
+                            .put("line", line)
+                    )
+
+                    if (sequence < count) {
+                        val elapsedMs = SystemClock.elapsedRealtime() - probeStartedAt
+                        val pauseMs = 1_000 - elapsedMs
+                        if (pauseMs > 0) Thread.sleep(pauseMs)
+                    }
+                }
+
+                val transmitted = count
+                val received = samples.size
+                val lossPercent = ((transmitted - received).coerceAtLeast(0) * 100.0 / transmitted)
+                val status = when {
+                    samples.isEmpty() -> "failed"
+                    received < transmitted -> "partial"
+                    else -> "success"
+                }
+                val message = when {
+                    status == "success" -> "All requested probes received replies."
+                    status == "partial" -> "Received $received of $transmitted replies."
+                    else -> outputDetail ?: "No ICMP replies received; Android may block native ping on this device."
+                }
+
+                publishNativePingResult(
+                    JSONObject()
+                        .put("type", "complete")
+                        .put("requestId", requestId)
+                        .put("host", targetHost)
+                        .put("count", count)
+                        .put("payloadSize", payloadSize)
+                        .put("status", status)
+                        .put("sent", transmitted)
+                        .put("received", received)
+                        .put("lossPercent", lossPercent)
+                        .put("samples", JSONArray().apply { samples.forEach(::put) })
+                        .put("minMs", samples.minOrNull() ?: JSONObject.NULL)
+                        .put("avgMs", samples.takeIf { it.isNotEmpty() }?.average() ?: JSONObject.NULL)
+                        .put("maxMs", samples.maxOrNull() ?: JSONObject.NULL)
+                        .put("message", message)
+                )
+            } catch (error: Exception) {
+                process?.destroyForcibly()
+                val received = samples.size
+                publishNativePingResult(
+                    JSONObject()
+                        .put("type", "complete")
+                        .put("requestId", requestId)
+                        .put("host", targetHost)
+                        .put("count", count)
+                        .put("payloadSize", payloadSize)
+                        .put("status", if (received == 0) "failed" else "partial")
+                        .put("sent", count)
+                        .put("received", received)
+                        .put("lossPercent", ((count - received).coerceAtLeast(0) * 100.0 / count))
+                        .put("samples", JSONArray().apply { samples.forEach(::put) })
+                        .put("minMs", samples.minOrNull() ?: JSONObject.NULL)
+                        .put("avgMs", samples.takeIf { it.isNotEmpty() }?.average() ?: JSONObject.NULL)
+                        .put("maxMs", samples.maxOrNull() ?: JSONObject.NULL)
+                        .put("message", error.localizedMessage ?: "Native ping could not be started.")
+                )
+            }
+        }, "speedxpat-native-ping").start()
+        return true
+    }
+
     private fun publishAccessPointVendorResult(oui: String, vendor: String?, status: String) {
         if (!::webView.isInitialized || isFinishing) return
         val eventDetail = JSONObject()
@@ -225,6 +367,17 @@ class MainActivity : AppCompatActivity() {
             "window.dispatchEvent(new CustomEvent('speedxpat-access-point-vendor', { detail: $eventDetail }))",
             null
         )
+    }
+
+    private fun publishNativePingResult(payload: JSONObject) {
+        if (!::webView.isInitialized || isFinishing) return
+        val detail = JSONObject.quote(payload.toString())
+        webView.post {
+            webView.evaluateJavascript(
+                "window.dispatchEvent(new CustomEvent('speedxpat-native-ping', { detail: $detail }));",
+                null
+            )
+        }
     }
 
     override fun onDestroy() {
@@ -622,6 +775,11 @@ class SpeedXpatNativeInterface(private val context: Context) {
     @JavascriptInterface
     fun scanWifiNetworks(): Boolean {
         return (context as? MainActivity)?.startWifiScan() ?: false
+    }
+
+    @JavascriptInterface
+    fun runNativePing(host: String, count: Int, payloadSize: Int, requestId: String): Boolean {
+        return (context as? MainActivity)?.runNativePing(host, count, payloadSize, requestId) ?: false
     }
 
     @JavascriptInterface

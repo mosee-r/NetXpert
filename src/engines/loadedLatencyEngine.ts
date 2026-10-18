@@ -8,7 +8,7 @@
  * Now includes latency during upload measurement.
  */
 
-import { LoadedLatencySummary, TestStatus, LatencySummary } from '../types/network';
+import { LoadedLatencySummary, TestStatus } from '../types/network';
 import { measureLatency } from './latencyEngine';
 import { createDownloadTestUrl, createRequestTimeout } from './testEndpoints';
 

@@ -2,9 +2,7 @@ import React from 'react';
 import {
   Settings,
   History,
-  CheckCircle2,
   X,
-  Trash2,
   RotateCcw,
 } from 'lucide-react';
 
@@ -47,7 +45,6 @@ export const Header: React.FC<HeaderProps> = ({
     : activeTab === 'tools'
     ? 'Tools'
     : 'Trends';
-  const isDiscardableResult = activeTab === 'speed' && showSpeedResults && hasPendingResult;
   const leftAction = activeTab === 'speed' && isTesting ? onCancelTest : onOpenSettings;
   const LeftIcon = activeTab === 'speed' && isTesting ? X : Settings;
   const leftLabel = activeTab === 'speed' && isTesting ? 'Cancel test' : 'Open app settings';

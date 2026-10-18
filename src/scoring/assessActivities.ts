@@ -805,7 +805,7 @@ function assessBrowsing(inputs: AssessmentInputs): ActivityAssessment {
  * 5. Remote Work, VPN, and Remote Desktop (RDP / Citrix)
  */
 function assessRemoteWork(inputs: AssessmentInputs): ActivityAssessment {
-  const { download, upload, latency, loadedLatency } = inputs;
+  const { download, latency, loadedLatency } = inputs;
   const primaryDownload = getPrimaryThroughput(download);
   const checks: RequirementCheck[] = [];
   const bottlenecks: string[] = [];

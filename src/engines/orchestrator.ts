@@ -15,10 +15,10 @@ import { measureMultiSizeThroughput, measureThroughput } from './throughputEngin
 import { measureLoadedLatency, measureUploadLatency } from './loadedLatencyEngine';
 import { assessAllActivities } from '../scoring/assessActivities';
 import { MlabDiagnosticsReport, OverallAssessmentReport } from '../types/scoring';
-import { ThroughputChartPoint, ThroughputSummary, SpeedTestServer } from '../types/network';
+import { ThroughputChartPoint } from '../types/network';
 import {
-  getServerById,
   getTestEndpointsForServer,
+  resolveServerSelection,
 } from './testEndpoints';
 import {
   locateNearestMlabServer,
@@ -82,7 +82,7 @@ export class AssessmentOrchestrator {
 
     // Get server info
     const serverId = options.serverId || DEFAULT_SERVER_ID;
-    const server = getServerById(serverId) || getServerById(DEFAULT_SERVER_ID)!;
+    const server = resolveServerSelection(serverId);
     const testEndpoints = getTestEndpointsForServer(serverId);
 
     const pingTarget = options.pingTarget || testEndpoints.ping;
@@ -252,8 +252,6 @@ export class AssessmentOrchestrator {
         console.warn(message);
       }
 
-      // Aggregate download results for backward compatibility
-      const primaryDownloadResult = downloadResults[downloadResults.length - 1] || downloadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
 
       // 5. Measure multi-size upload throughput
@@ -324,8 +322,6 @@ export class AssessmentOrchestrator {
         console.warn(message);
       }
 
-      // Aggregate upload results for backward compatibility
-      const primaryUploadResult = uploadResults[uploadResults.length - 1] || uploadResults[0];
       if (signal.aborted) throw new Error('Cancelled by user');
 
       // 6. Run optional M-Lab NDT7 diagnostics separately from primary throughput scoring

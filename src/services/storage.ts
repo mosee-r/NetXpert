@@ -7,18 +7,10 @@
  */
 
 import { OverallAssessmentReport } from '../types/scoring';
-import { ThroughputSummary } from '../types/network';
 import { getAndroidNativeBridge } from '../engines/testEndpoints';
-import { maskIpAddress } from '../utils/privacy';
 
 const STORAGE_KEY = 'speedxpat_assessment_history_v1';
 const LEGACY_STORAGE_KEY = 'netxpert_assessment_history_v1';
-
-// Helper to get primary (last/largest) throughput from array
-function getPrimaryThroughput(results: ThroughputSummary[] | undefined): ThroughputSummary | null {
-  if (!results || results.length === 0) return null;
-  return results[results.length - 1] || results[0];
-}
 
 export function saveAssessmentReport(report: OverallAssessmentReport): boolean {
   try {
@@ -71,122 +63,6 @@ export function clearAllHistory(): void {
 }
 
 export { downloadPdfReport } from './pdfReportGenerator';
-
-/**
- * Generate CSV representation of an assessment report
- */
-export function exportReportToCsv(report: OverallAssessmentReport): string {
-  const rows: string[][] = [
-    ['SpeedXpat Network Diagnostic Report'],
-    ['Report ID', report.id],
-    ['Timestamp', report.timestamp],
-    ['App Version', report.appVersion],
-    ['Scoring Rules Version', report.scoringVersion],
-    ['Overall Verdict', report.overallRating.toUpperCase()],
-    ['Headline Summary', `"${report.headlineSummary.replace(/"/g, '""')}"`],
-    ['ISP Identity (IP-to-ASN Lookup)'],
-    ['Connection Type', report.networkInfo.networkType],
-    ['ISP Provider', report.networkInfo.ispName || report.networkInfo.asnOrg || 'N/A'],
-    ['ISP ASN', report.networkInfo.asn || 'N/A'],
-    ['Geography', `${report.networkInfo.locationCity || ''}, ${report.networkInfo.locationCountry || ''}`],
-    ['Effective Transport', report.networkInfo.effectiveType || 'N/A'],
-    ['Public IP', maskIpAddress(report.networkInfo.ipAddress)],
-    [],
-    ['Primary speed-test provider', 'Cloudflare Speed Test edge (automatically selected)'],
-    ['Primary Speed-Test Server Details'],
-    ['Download endpoint', getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.target ?? 'N/A'],
-    ['Upload endpoint', getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.target ?? 'N/A'],
-    [],
-    ['Separate M-Lab Diagnostic Server Details'],
-    ['M-Lab server', report.mlabDiagnostics?.server?.label || report.mlabDiagnostics?.lookupError || 'Not available'],
-    ['M-Lab hostname', report.mlabDiagnostics?.server?.hostname || 'Not available'],
-    ['M-Lab location', report.mlabDiagnostics?.server ? `${report.mlabDiagnostics.server.city}, ${report.mlabDiagnostics.server.country}` : 'Not available'],
-    ['M-Lab diagnostics requested', String(report.mlabDiagnostics?.requested ?? false)],
-    ['M-Lab download TCP RTT (ms)', String(report.mlabDiagnostics?.download?.tcpRttMs ?? (report.mlabDiagnostics?.requested ? 'Unavailable' : 'Not run'))],
-    ['M-Lab upload TCP RTT (ms)', String(report.mlabDiagnostics?.upload?.tcpRttMs ?? (report.mlabDiagnostics?.requested ? 'Unavailable' : 'Not run'))],
-    [],
-    ['Raw Performance Measurements'],
-    ['Metric', 'Measured Value', 'Unit', 'Method', 'Status'],
-    [
-      'Idle Latency (Median)',
-      String(report.rawMeasurements.idleLatency.medianMs ?? 'N/A'),
-      'ms',
-      report.rawMeasurements.idleLatency.method,
-      report.rawMeasurements.idleLatency.status,
-    ],
-    [
-      'Idle Latency (Min)',
-      String(report.rawMeasurements.idleLatency.minMs ?? 'N/A'),
-      'ms',
-      report.rawMeasurements.idleLatency.method,
-      report.rawMeasurements.idleLatency.status,
-    ],
-    [
-      'Idle Latency (Max)',
-      String(report.rawMeasurements.idleLatency.maxMs ?? 'N/A'),
-      'ms',
-      report.rawMeasurements.idleLatency.method,
-      report.rawMeasurements.idleLatency.status,
-    ],
-    [
-      'Jitter',
-      String(report.rawMeasurements.idleLatency.jitterMs ?? 'N/A'),
-      'ms',
-      'RFC 3550 Interarrival Deviation',
-      report.rawMeasurements.idleLatency.status,
-    ],
-    [
-      'Download Throughput',
-      String(getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.mbps ?? 'N/A'),
-      'Mbps',
-      getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.method ?? 'N/A',
-      getPrimaryThroughput(report.rawMeasurements.downloadThroughput)?.status ?? 'N/A',
-    ],
-    [
-      'Upload Throughput',
-      String(getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.mbps ?? 'N/A'),
-      'Mbps',
-      getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.method ?? 'N/A',
-      getPrimaryThroughput(report.rawMeasurements.uploadThroughput)?.status ?? 'N/A',
-    ],
-    [
-      'Latency Under Load (Bufferbloat Delta)',
-      String(report.rawMeasurements.loadedLatency.loadedDeltaMs ?? 'N/A'),
-      '+ms',
-      'Concurrent HTTP Load Stream',
-      report.rawMeasurements.loadedLatency.status,
-    ],
-    [
-      'Bufferbloat Grade',
-      report.rawMeasurements.loadedLatency.bufferbloatGrade,
-      'Grade',
-      'Bufferbloat Severity Rating',
-      report.rawMeasurements.loadedLatency.status,
-    ],
-    [
-      'DNS Resolution Time',
-      String(report.rawMeasurements.dnsTiming.durationMs ?? 'N/A'),
-      'ms',
-      report.rawMeasurements.dnsTiming.method,
-      report.rawMeasurements.dnsTiming.status,
-    ],
-    [],
-    ['Activity Capability Assessment Breakdown'],
-    ['Activity', 'Rating', 'Confidence', 'Summary', 'Primary Bottlenecks'],
-  ];
-
-  for (const act of report.activities) {
-    rows.push([
-      act.displayName,
-      act.rating.toUpperCase(),
-      act.confidence.toUpperCase(),
-      `"${act.summary.replace(/"/g, '""')}"`,
-      `"${act.bottlenecks.join('; ').replace(/"/g, '""')}"`,
-    ]);
-  }
-
-  return rows.map((r) => r.join(',')).join('\n');
-}
 
 /**
  * Trigger file download in browser

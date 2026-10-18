@@ -11,7 +11,6 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  HelpCircle,
   Sparkles,
 } from 'lucide-react';
 import { ActivityAssessment, ActivityRating } from '../types/scoring';

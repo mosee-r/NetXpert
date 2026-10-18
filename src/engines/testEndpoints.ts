@@ -183,6 +183,7 @@ export interface AndroidNativeBridge {
   openLocationSettings(): void;
   openApplicationSettings(): void;
   scanWifiNetworks(): boolean;
+  runNativePing?(host: string, count: number, payloadSize: number, requestId: string): boolean;
   saveFile(filename: string, mimeType: string, content: string, base64Encoded: boolean): boolean;
   shareFile?(filename: string, mimeType: string, content: string, base64Encoded: boolean): boolean;
 }
@@ -241,6 +242,7 @@ export function getAndroidFeatureState() {
       locationEnabled: false,
       canRequestAccess: false,
       canShowWifiScanner: false,
+      canRunNativePing: false,
     };
   }
 
@@ -257,6 +259,7 @@ export function getAndroidFeatureState() {
     locationEnabled,
     canRequestAccess: !hasPermission || !locationEnabled,
     canShowWifiScanner: hasPermission && locationEnabled && typeof bridge.scanWifiNetworks === 'function',
+    canRunNativePing: typeof bridge.runNativePing === 'function',
   };
 }
 
@@ -275,17 +278,44 @@ export function getServerById(id: string): SpeedTestServer | undefined {
 }
 
 /**
- * Get the default server (auto-selected based on user location or first in list)
+ * Resolve the server selection, including the global AUTO default.
+ * If a user or environment has no explicit preference, prefer a neutral non-Africa fallback.
+ */
+export function resolveServerSelection(serverId?: string): SpeedTestServer {
+  const requestedId = (serverId || DEFAULT_SERVER_ID || '').trim().toLowerCase();
+
+  if (!requestedId || requestedId === 'auto') {
+    const timezone =
+      typeof Intl !== 'undefined'
+        ? Intl.DateTimeFormat().resolvedOptions().timeZone || ''
+        : '';
+
+    const regionHints = [
+      { match: /(America|Canada|US|Mexico|Brazil)/i, id: 'lax' },
+      { match: /(Europe|London|Paris|Berlin|Frankfurt|Amsterdam|Rome|Madrid|Zurich)/i, id: 'fra' },
+      { match: /(Asia|Singapore|Tokyo|Seoul|Hong|India|Mumbai|Delhi|Korea|China|Japan|Sydney)/i, id: 'sin' },
+      { match: /(Australia|New Zealand|Pacific)/i, id: 'syd' },
+    ];
+
+    const inferredId = regionHints.find(({ match }) => match.test(timezone))?.id;
+    return getServerById(inferredId || 'fra') || CLOUDFLARE_SPEED_SERVERS[0];
+  }
+
+  return getServerById(requestedId) || getServerById('fra') || CLOUDFLARE_SPEED_SERVERS[0];
+}
+
+/**
+ * Get the default server (auto-selected based on user location or a neutral fallback)
  */
 export function getDefaultServer(): SpeedTestServer {
-  return getServerById(DEFAULT_SERVER_ID) || CLOUDFLARE_SPEED_SERVERS[0];
+  return resolveServerSelection(DEFAULT_SERVER_ID);
 }
 
 /**
  * Get test endpoints for a specific server
  */
 export function getTestEndpointsForServer(serverId: string): TestEndpoints {
-  const server = getServerById(serverId);
+  const server = serverId === 'auto' ? resolveServerSelection(serverId) : getServerById(serverId);
   const hostname = server?.hostname || CLOUDFLARE_HOST;
   const origin = `https://${hostname}`;
   
@@ -330,5 +360,5 @@ export function getServerIdFromHostname(hostname: string): string {
   const server = CLOUDFLARE_SPEED_SERVERS.find(
     (s) => s.hostname === hostname || new URL(s.hostname).hostname === new URL(hostname).hostname
   );
-  return server?.id || DEFAULT_SERVER_ID;
+  return server?.id || resolveServerSelection(DEFAULT_SERVER_ID).id;
 }

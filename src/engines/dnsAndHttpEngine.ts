@@ -5,8 +5,104 @@
  * Measures DNS lookup speed and phase-separated HTTP waterfall timing (DNS, TCP, TLS, TTFB).
  */
 
-import { DnsTimingResult, HttpTimingResult, TestStatus } from '../types/network';
+import { DnsTimingResult, HttpTimingResult } from '../types/network';
 import { createRequestTimeout, isAndroidNativeApp } from './testEndpoints';
+
+export interface DnsResolverProvider {
+  name: string;
+  endpoint: string;
+}
+
+export const DNS_BENCHMARK_RESOLVERS: DnsResolverProvider[] = [
+  { name: 'Cloudflare', endpoint: 'https://cloudflare-dns.com/dns-query' },
+  { name: 'Google Public DNS', endpoint: 'https://dns.google/resolve' },
+];
+
+export interface DnsResolverTimingResult {
+  durationMs: number | null;
+  resolvedIp: string | null;
+  errorMessage?: string;
+}
+
+export async function measureDnsResolverTiming(
+  resolver: DnsResolverProvider,
+  domain: string,
+  signal?: AbortSignal,
+  fetcher: typeof fetch = fetch
+): Promise<DnsResolverTimingResult> {
+  let requestTimeout: ReturnType<typeof createRequestTimeout> | undefined;
+
+  try {
+    const queryUrl = new URL(resolver.endpoint);
+    queryUrl.searchParams.set('name', domain);
+    queryUrl.searchParams.set('type', 'A');
+    requestTimeout = createRequestTimeout(signal, 5_000);
+
+    const start = performance.now();
+    const response = await fetcher(queryUrl.toString(), {
+      headers: { Accept: 'application/dns-json' },
+      cache: 'no-store',
+      signal: requestTimeout.signal,
+    });
+    if (!response.ok) {
+      return {
+        durationMs: null,
+        resolvedIp: null,
+        errorMessage: `Resolver returned HTTP ${response.status}.`,
+      };
+    }
+
+    const payload: unknown = await response.json();
+    if (!payload || typeof payload !== 'object' || !('Status' in payload)) {
+      return { durationMs: null, resolvedIp: null, errorMessage: 'Resolver returned an invalid DNS response.' };
+    }
+
+    const data = payload as { Status: unknown; Answer?: unknown };
+    if (data.Status !== 0) {
+      return {
+        durationMs: null,
+        resolvedIp: null,
+        errorMessage: `Resolver returned DNS status ${String(data.Status)}.`,
+      };
+    }
+
+    const answers = Array.isArray(data.Answer) ? data.Answer : [];
+    const answer = answers.find(
+      (record): record is { type: number; data: string } =>
+        !!record &&
+        typeof record === 'object' &&
+        'type' in record &&
+        record.type === 1 &&
+        'data' in record &&
+        typeof record.data === 'string'
+    );
+
+    if (!answer) {
+      return {
+        durationMs: null,
+        resolvedIp: null,
+        errorMessage: 'Resolver returned no IPv4 answer.',
+      };
+    }
+
+    return {
+      durationMs: Math.round(performance.now() - start),
+      resolvedIp: answer.data,
+    };
+  } catch (error: unknown) {
+    return {
+      durationMs: null,
+      resolvedIp: null,
+      errorMessage: signal?.aborted
+        ? 'Resolver request cancelled.'
+        : error instanceof DOMException && error.name === 'AbortError'
+        ? 'Resolver request timed out.'
+        : 'Resolver request failed.',
+    };
+  } finally {
+    requestTimeout?.dispose();
+  }
+}
 
 export async function measureDnsTiming(
   domain = '1.1.1.1',

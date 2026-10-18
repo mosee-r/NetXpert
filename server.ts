@@ -9,8 +9,8 @@ import { createServer as createHttpServer } from 'node:http';
 import express from 'express';
 import path from 'path';
 import 'dotenv/config';
-import { app } from './api';
-import { DEFAULT_PORT } from './src/config/defaults';
+import { app } from './api.ts';
+import { DEFAULT_PORT } from './src/config/defaults.ts';
 
 const httpServer = createHttpServer(app);
 

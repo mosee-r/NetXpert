@@ -15,6 +15,7 @@ describe('getAndroidFeatureState', () => {
     assert.equal(state.locationEnabled, false);
     assert.equal(state.canRequestAccess, false);
     assert.equal(state.canShowWifiScanner, false);
+    assert.equal(state.canRunNativePing, false);
   });
 
   it('blocks Wi-Fi scanner UI until permission and location services are enabled', () => {
@@ -51,5 +52,13 @@ describe('getAndroidFeatureState', () => {
     assert.equal(state.locationEnabled, true);
     assert.equal(state.canRequestAccess, false);
     assert.equal(state.canShowWifiScanner, true);
+  });
+
+  it('enables native ping only when the Android bridge exposes it', () => {
+    (globalThis as typeof globalThis & { window: Window & { AndroidNative: any } }).window = {
+      AndroidNative: { runNativePing: () => true },
+    } as any;
+
+    assert.equal(getAndroidFeatureState().canRunNativePing, true);
   });
 });

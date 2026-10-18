@@ -3,7 +3,7 @@
  * Compliant with SPEEDXPAT_UI_SPEC.md
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Header } from './components/Header';
 import { BottomNav, MainTabType } from './components/BottomNav';
 import { SpeedTestHome } from './components/SpeedTestHome';
@@ -11,6 +11,7 @@ import { NetworkTab } from './components/NetworkTab';
 import { DiagnosticToolsTab } from './components/DiagnosticToolsTab';
 import { TrendsTab } from './components/TrendsTab';
 import { SettingsModal } from './components/SettingsModal';
+import { AboutPage, ANDROID_RELEASE_URL } from './components/AboutPage';
 
 import { DeviceNetworkInfo, ThroughputChartPoint } from './types/network';
 import { OverallAssessmentReport } from './types/scoring';
@@ -23,12 +24,15 @@ import {
   clearAllHistory,
 } from './services/storage';
 import { triggerHaptic } from './utils/haptics';
+import { DEFAULT_DNS_DOMAIN } from './config/defaults';
 import {
   getDefaultTestEndpoints,
   isAndroidNativeApp,
 } from './engines/testEndpoints';
 
 const defaultTestEndpoints = getDefaultTestEndpoints();
+const ABOUT_PATH = '/about';
+const ANDROID_PROMPT_SEEN_KEY = 'speedxpat.android-download-prompt.seen';
 
 function validateTestSettings(
   pingTarget: string,
@@ -66,6 +70,9 @@ function validateTestSettings(
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<MainTabType>('speed');
+  const [isAboutOpen, setIsAboutOpen] = useState(() => window.location.pathname === ABOUT_PATH);
+  const [showAndroidDownloadPrompt, setShowAndroidDownloadPrompt] = useState(false);
+  const hasShownAndroidPromptRef = useRef(false);
   const [networkInfo, setNetworkInfo] = useState<DeviceNetworkInfo | null>(null);
   const [history, setHistory] = useState<OverallAssessmentReport[]>(() =>
     getAssessmentHistory()
@@ -82,13 +89,10 @@ export default function App() {
   });
   const [pendingReport, setPendingReport] = useState<OverallAssessmentReport | null>(null);
   const [showResults, setShowResults] = useState(false);
-  const primaryDownload = getPrimaryThroughput(currentReport?.rawMeasurements.downloadThroughput);
-  const initialDownloadMbps = primaryDownload?.mbps;
 
   // Settings Modal State
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
-  const [dnsDomain, setDnsDomain] = useState('1.1.1.1');
   const [maxDownloadMb, setMaxDownloadMb] = useState(8);
   const [maxUploadMb, setMaxUploadMb] = useState(4);
   const [benchmarkMode, setBenchmarkMode] = useState(true);
@@ -113,21 +117,6 @@ export default function App() {
   const [progressPercent, setProgressPercent] = useState(0);
   const [appError, setAppError] = useState<string | null>(null);
   const [isOnline, setIsOnline] = useState<boolean | null>(null);
-  // Hero Gauge Counter State
-  const [heroValue, setHeroValue] = useState(
-    initialDownloadMbps !== null && initialDownloadMbps !== undefined
-      ? initialDownloadMbps.toFixed(1)
-      : '0'
-  );
-  const [heroUnit, setHeroUnit] = useState('Mbps');
-  const [heroLabel, setHeroLabel] = useState(
-    initialDownloadMbps !== null && initialDownloadMbps !== undefined
-      ? 'DOWNLOAD SPEED'
-      : currentReport
-      ? 'NO DOWNLOAD RESULT'
-      : 'TEST READY'
-  );
-
   // Real-time Sparkline & Matrix updates
   const [downloadSparklineData, setDownloadSparklineData] = useState<ThroughputChartPoint[]>([]);
   const [uploadSparklineData, setUploadSparklineData] = useState<ThroughputChartPoint[]>([]);
@@ -143,22 +132,27 @@ export default function App() {
   const lastPhaseRef = useRef<string>('');
 
   useEffect(() => {
-    const primaryDownload = getPrimaryThroughput(currentReport?.rawMeasurements.downloadThroughput);
-    const downloadMbps = primaryDownload?.mbps;
-    if (downloadMbps !== null && downloadMbps !== undefined) {
-      setHeroValue(downloadMbps.toFixed(1));
-      setHeroUnit('Mbps');
-      setHeroLabel('DOWNLOAD SPEED');
-    } else if (currentReport) {
-      setHeroValue('0');
-      setHeroUnit('Mbps');
-      setHeroLabel('NO DOWNLOAD RESULT');
-    } else {
-      setHeroValue('0');
-      setHeroUnit('Mbps');
-      setHeroLabel('TEST READY');
+    const handlePopState = () => setIsAboutOpen(window.location.pathname === ABOUT_PATH);
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
+  const handleOpenAbout = () => {
+    setIsSettingsOpen(false);
+    if (window.location.pathname !== ABOUT_PATH) {
+      window.history.pushState({ speedxpatAboutEntry: true }, '', ABOUT_PATH);
     }
-  }, [currentReport]);
+    setIsAboutOpen(true);
+  };
+
+  const handleCloseAbout = () => {
+    if (window.history.state?.speedxpatAboutEntry === true) {
+      window.history.back();
+      return;
+    }
+    window.history.replaceState(null, '', '/');
+    setIsAboutOpen(false);
+  };
 
   // Initial network info detection & listeners
   useEffect(() => {
@@ -215,7 +209,7 @@ export default function App() {
   const handleStartTest = async () => {
     const validationError = validateTestSettings(
       pingTarget,
-      dnsDomain
+      DEFAULT_DNS_DOMAIN
     );
     if (validationError) {
       setActiveTab('speed');
@@ -232,9 +226,6 @@ export default function App() {
     setDownloadSparklineData([]);
     setUploadSparklineData([]);
     setActiveMetrics({});
-    setHeroValue('0');
-    setHeroUnit('Mbps');
-    setHeroLabel('INITIALIZING...');
 
     const orchestrator = new AssessmentOrchestrator();
     orchestratorRef.current = orchestrator;
@@ -254,7 +245,7 @@ export default function App() {
 
       const report = await orchestrator.runAssessment({
         pingTarget,
-        dnsDomain,
+        dnsDomain: DEFAULT_DNS_DOMAIN,
         maxDownloadBytes: effectiveDownloadLimitBytes,
         maxUploadBytes: effectiveUploadLimitBytes,
         onProgress: (p: AssessmentProgress) => {
@@ -273,18 +264,12 @@ export default function App() {
             const match = p.currentMetricValue?.match(/(\d+)\s*ms/);
             if (match) {
               const ping = parseInt(match[1], 10);
-              setHeroValue(String(ping));
-              setHeroUnit('ms');
-              setHeroLabel('IDLE PING');
               setActiveMetrics((prev) => ({ ...prev, pingMs: ping }));
             }
           } else if (p.stage === 'measuring_download') {
             const match = p.currentMetricValue?.match(/([\d.]+)\s*Mbps/);
             if (match) {
               const mbps = parseFloat(match[1]);
-              setHeroValue(mbps.toFixed(1));
-              setHeroUnit('Mbps');
-              setHeroLabel('DOWNLOAD STREAM');
               setActiveMetrics((prev) => ({ ...prev, downloadMbps: mbps }));
             }
             const throughputSample = p.throughputSample;
@@ -295,9 +280,6 @@ export default function App() {
             const match = p.currentMetricValue?.match(/([\d.]+)\s*Mbps/);
             if (match) {
               const mbps = parseFloat(match[1]);
-              setHeroValue(mbps.toFixed(1));
-              setHeroUnit('Mbps');
-              setHeroLabel('UPLOAD STREAM');
               setActiveMetrics((prev) => ({ ...prev, uploadMbps: mbps }));
             }
             const throughputSample = p.throughputSample;
@@ -308,9 +290,6 @@ export default function App() {
             const match = p.currentMetricValue?.match(/(\d+)\s*ms/);
             if (match) {
               const loaded = parseInt(match[1], 10);
-              setHeroValue(String(loaded));
-              setHeroUnit('ms');
-              setHeroLabel('PING UNDER LOAD');
               setActiveMetrics((prev) => ({ ...prev, loadedPingMs: loaded }));
             }
           }
@@ -320,6 +299,17 @@ export default function App() {
       triggerHaptic('success');
       setPendingReport(report);
       setShowResults(true);
+      if (!isAndroidNativeApp() && !hasShownAndroidPromptRef.current) {
+        hasShownAndroidPromptRef.current = true;
+        let shouldShowPrompt = true;
+        try {
+          shouldShowPrompt = localStorage.getItem(ANDROID_PROMPT_SEEN_KEY) !== 'true';
+          if (shouldShowPrompt) localStorage.setItem(ANDROID_PROMPT_SEEN_KEY, 'true');
+        } catch {
+          shouldShowPrompt = true;
+        }
+        if (shouldShowPrompt) setShowAndroidDownloadPrompt(true);
+      }
 
       // Get primary (last/largest) results for sparkline display
       const primaryDownload = getPrimaryThroughput(report.rawMeasurements.downloadThroughput);
@@ -340,17 +330,10 @@ export default function App() {
       })));
 
       // Set final hero readout
-      const finalDl = primaryDownload?.mbps;
-      if (finalDl !== null && finalDl !== undefined) {
-        setHeroValue(finalDl.toFixed(1));
-        setHeroUnit('Mbps');
-        setHeroLabel('DOWNLOAD SPEED');
-      }
     } catch (error: unknown) {
       triggerHaptic('error');
       if (!String(error).toLowerCase().includes('cancel')) {
         setTestStage('failed');
-        setHeroLabel('TEST FAILED');
         setAppError(
           isOnline !== false
             ? 'The assessment could not finish. Check your connection and test targets, then try again.'
@@ -390,7 +373,6 @@ export default function App() {
     setTestStage('idle');
     setPendingReport(null);
     setShowResults(false);
-    setHeroLabel('TEST CANCELLED');
   };
 
   const handleDeleteReport = (id: string) => {
@@ -414,6 +396,10 @@ export default function App() {
 
   return (
     <div className="app-shell min-h-screen text-app-primary flex flex-col font-sans selection:bg-app-accent selection:text-white">
+      {isAboutOpen ? (
+        <AboutPage isAndroidApp={isAndroidNativeApp()} onBack={handleCloseAbout} />
+      ) : (
+        <>
       {/* 0. Initial Animated Splash Screen Overlay */}
       {isSplashActive && (
         <div
@@ -463,6 +449,33 @@ export default function App() {
 
       {/* 2. Main Content Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto px-3.5 sm:px-6 py-4">
+        {showAndroidDownloadPrompt && (
+          <aside className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-app-accent/25 bg-app-surface px-4 py-3" aria-label="Android app download">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-app-primary">Native diagnostics on Android</p>
+              <p className="mt-0.5 text-xs leading-5 text-app-secondary">Get the Android app for native ICMP ping and nearby Wi-Fi tools.</p>
+            </div>
+            <div className="flex shrink-0 items-center gap-2">
+              <a
+                className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-app-accent px-3 text-xs font-semibold text-white transition-colors hover:bg-app-accent-hover"
+                href={ANDROID_RELEASE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Get Android app
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowAndroidDownloadPrompt(false)}
+                className="grid h-11 w-11 place-items-center rounded-lg text-app-muted transition-colors hover:bg-app-raised hover:text-app-primary"
+                aria-label="Dismiss Android app prompt"
+                title="Dismiss"
+              >
+                <span aria-hidden="true">×</span>
+              </button>
+            </div>
+          </aside>
+        )}
         {isOnline === false && (
           <div
             role="status"
@@ -500,9 +513,6 @@ export default function App() {
             stage={testStage}
             stageName={stageName}
             progressPercent={progressPercent}
-            heroValue={heroValue}
-            heroUnit={heroUnit}
-            heroLabel={heroLabel}
             downloadSparklineData={downloadSparklineData}
             uploadSparklineData={uploadSparklineData}
             activeMetrics={activeMetrics}
@@ -555,8 +565,6 @@ export default function App() {
         onClose={() => setIsSettingsOpen(false)}
         pingTarget={pingTarget}
         setPingTarget={setPingTarget}
-        dnsDomain={dnsDomain}
-        setDnsDomain={setDnsDomain}
         maxDownloadMb={maxDownloadMb}
         setMaxDownloadMb={setMaxDownloadMb}
         maxUploadMb={maxUploadMb}
@@ -571,7 +579,10 @@ export default function App() {
         setConcurrencyCount={setConcurrencyCount}
         dataSaverMode={dataSaverMode}
         setDataSaverMode={setDataSaverMode}
+        onOpenAbout={handleOpenAbout}
       />
+        </>
+      )}
     </div>
   );
 }

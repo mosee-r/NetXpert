@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   Wrench,
   Activity,
+  ChevronDown,
   Gauge,
   Globe,
   Radio,
@@ -9,13 +10,10 @@ import {
   Play,
   Square,
   Loader2,
-  CheckCircle2,
-  AlertTriangle,
-  RotateCcw,
   Wifi,
 } from 'lucide-react';
 import { measureLatency } from '../engines/latencyEngine';
-import { measureDnsTiming } from '../engines/dnsAndHttpEngine';
+import { DNS_BENCHMARK_RESOLVERS, measureDnsResolverTiming } from '../engines/dnsAndHttpEngine';
 import { measureLoadedLatency } from '../engines/loadedLatencyEngine';
 import { DeviceNetworkInfo, LoadedLatencySummary } from '../types/network';
 import { getAndroidFeatureState, getAndroidNativeBridge, getDefaultTestEndpoints } from '../engines/testEndpoints';
@@ -39,6 +37,104 @@ interface WifiSignalHistory {
 type WifiAnalyzerView = 'access-points' | 'channel' | 'time' | 'rating';
 type WifiSecurityFilter = 'All' | 'Open' | 'Enhanced Open' | 'WEP' | 'WPA' | 'WPA2' | 'WPA3';
 
+interface NativePingResult {
+  requestId: string;
+  host: string;
+  count: number;
+  payloadSize: number;
+  status: 'success' | 'partial' | 'failed';
+  sent: number;
+  received: number;
+  lossPercent: number;
+  samples: number[];
+  minMs: number | null;
+  avgMs: number | null;
+  maxMs: number | null;
+  message: string;
+}
+
+interface NativePingProgress {
+  requestId: string;
+  host: string;
+  count: number;
+  payloadSize: number;
+  sent: number;
+  received: number;
+  line: string;
+}
+
+type NativePingEvent =
+  | { type: 'progress'; progress: NativePingProgress }
+  | { type: 'complete'; result: NativePingResult };
+
+function parseNativePingResult(value: string): NativePingResult | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object') return null;
+    const result = parsed as Partial<NativePingResult>;
+    if (
+      typeof result.requestId !== 'string' ||
+      typeof result.host !== 'string' ||
+      typeof result.count !== 'number' ||
+      typeof result.payloadSize !== 'number' ||
+      !['success', 'partial', 'failed'].includes(result.status || '') ||
+      typeof result.sent !== 'number' ||
+      typeof result.received !== 'number' ||
+      typeof result.lossPercent !== 'number' ||
+      !Array.isArray(result.samples) ||
+      typeof result.message !== 'string'
+    ) return null;
+
+    return {
+      ...result,
+      status: result.status as NativePingResult['status'],
+      minMs: typeof result.minMs === 'number' ? result.minMs : null,
+      avgMs: typeof result.avgMs === 'number' ? result.avgMs : null,
+      maxMs: typeof result.maxMs === 'number' ? result.maxMs : null,
+      samples: result.samples.filter((sample): sample is number => typeof sample === 'number' && Number.isFinite(sample)),
+    } as NativePingResult;
+  } catch {
+    return null;
+  }
+}
+
+function parseNativePingEvent(value: string): NativePingEvent | null {
+  try {
+    const parsed: unknown = JSON.parse(value);
+    if (!parsed || typeof parsed !== 'object' || !('type' in parsed)) return null;
+    const event = parsed as Record<string, unknown>;
+    if (event.type === 'complete') {
+      const result = parseNativePingResult(value);
+      return result ? { type: 'complete', result } : null;
+    }
+    if (
+      event.type !== 'progress' ||
+      typeof event.requestId !== 'string' ||
+      typeof event.host !== 'string' ||
+      typeof event.count !== 'number' ||
+      typeof event.payloadSize !== 'number' ||
+      typeof event.sent !== 'number' ||
+      typeof event.received !== 'number' ||
+      typeof event.line !== 'string'
+    ) return null;
+
+    return {
+      type: 'progress',
+      progress: {
+        requestId: event.requestId,
+        host: event.host,
+        count: event.count,
+        payloadSize: event.payloadSize,
+        sent: event.sent,
+        received: event.received,
+        line: event.line,
+      },
+    };
+  } catch {
+    return null;
+  }
+}
+
 const WIFI_SECURITY_FILTERS: WifiSecurityFilter[] = [
   'All',
   'Open',
@@ -54,6 +150,11 @@ function isWifiSecurityFilter(value: string): value is WifiSecurityFilter {
 }
 
 const WIFI_SCAN_INTERVAL_MS = 35_000;
+const formatToolLatency = (value: number | null | undefined) =>
+  value === null || value === undefined || !Number.isFinite(value)
+    ? 'Unavailable'
+    : `${Math.round(value)} ms`;
+
 function parseWifiScanResponse(value: string): WifiScanResponse | null {
   try {
     const response: unknown = JSON.parse(value);
@@ -109,11 +210,23 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   const defaultTestEndpoints = getDefaultTestEndpoints();
   const nativeFeatureState = getAndroidFeatureState();
   const canUseWifiScan = nativeFeatureState.canShowWifiScanner;
+  const canUseNativePing = nativeFeatureState.canRunNativePing;
+
+  const [nativePingHost, setNativePingHost] = useState('1.1.1.1');
+  const [nativePingCount, setNativePingCount] = useState('5');
+  const [nativePingPayloadSize, setNativePingPayloadSize] = useState('56');
+  const [isNativePinging, setIsNativePinging] = useState(false);
+  const [nativePingProgress, setNativePingProgress] = useState<NativePingProgress | null>(null);
+  const [nativePingLiveReplies, setNativePingLiveReplies] = useState<NativePingProgress[]>([]);
+  const [nativePingResult, setNativePingResult] = useState<NativePingResult | null>(null);
+  const [nativePingError, setNativePingError] = useState<string | null>(null);
+  const nativePingRequestRef = useRef<string | null>(null);
+  const nativePingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Tool 1: Continuous Ping & Jitter Monitor
   const [isMonitoringPing, setIsMonitoringPing] = useState(false);
   const [pingTarget, setPingTarget] = useState(defaultTestEndpoints.ping);
-  const [rollingPingSamples, setRollingPingSamples] = useState<number[]>([]);
+  const [rollingPingSamples, setRollingPingSamples] = useState<Array<number | null>>([]);
   const pingControllerRef = useRef<AbortController | null>(null);
 
   // Tool 2: Standalone Bufferbloat Test
@@ -123,24 +236,24 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   // Tool 3: DNS Benchmark Utility
   const [isBenchmarkingDns, setIsBenchmarkingDns] = useState(false);
   const [dnsRankings, setDnsRankings] = useState<
-    { name: string; ip: string; durationMs: number | null }[]
+    { name: string; durationMs: number | null; resolvedIp: string | null; errorMessage?: string }[]
   >([]);
 
   // Tool 4: Remote HTTP endpoint latency
-  const [gatewayTarget, setGatewayTarget] = useState(defaultTestEndpoints.ping);
   const [isPingingGateway, setIsPingingGateway] = useState(false);
   const [gatewayResult, setGatewayResult] = useState<{
-    minMs: number;
-    medianMs: number;
-    maxMs: number;
-    jitterMs: number;
+    minMs: number | null;
+    medianMs: number | null;
+    maxMs: number | null;
+    jitterMs: number | null;
   } | null>(null);
+  const [gatewayError, setGatewayError] = useState<string | null>(null);
 
   // Tool 5: Port & HTTPS Reachability Checker
   const [reachTarget, setReachTarget] = useState('https://1.1.1.1');
   const [isCheckingReach, setIsCheckingReach] = useState(false);
   const [reachResult, setReachResult] = useState<{
-    status: number | string;
+    status: string;
     durationMs: number;
     reachable: boolean;
   } | null>(null);
@@ -335,6 +448,95 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
     };
   }, []);
 
+  useEffect(() => {
+    const handleNativePingResult = (event: Event) => {
+      const detail = (event as CustomEvent<string>).detail;
+      const pingEvent = typeof detail === 'string' ? parseNativePingEvent(detail) : null;
+      if (!pingEvent) return;
+
+      const requestId = pingEvent.type === 'progress'
+        ? pingEvent.progress.requestId
+        : pingEvent.result.requestId;
+      if (requestId !== nativePingRequestRef.current) return;
+
+      if (pingEvent.type === 'progress') {
+        setNativePingProgress(pingEvent.progress);
+        setNativePingLiveReplies((previous) => [...previous, pingEvent.progress].slice(-10));
+        return;
+      }
+
+      if (nativePingTimeoutRef.current) clearTimeout(nativePingTimeoutRef.current);
+      nativePingTimeoutRef.current = null;
+      nativePingRequestRef.current = null;
+      setNativePingProgress(null);
+      setNativePingLiveReplies([]);
+      setNativePingResult(pingEvent.result);
+      setNativePingError(null);
+      setIsNativePinging(false);
+    };
+
+    window.addEventListener('speedxpat-native-ping', handleNativePingResult);
+    return () => {
+      window.removeEventListener('speedxpat-native-ping', handleNativePingResult);
+      if (nativePingTimeoutRef.current) clearTimeout(nativePingTimeoutRef.current);
+    };
+  }, []);
+
+  const handleRunNativePing = () => {
+    const bridge = getAndroidNativeBridge();
+    const host = nativePingHost.trim();
+    const count = Number(nativePingCount);
+    const payloadSize = Number(nativePingPayloadSize);
+    if (!bridge?.runNativePing || !canUseNativePing) {
+      setNativePingError('Native ping is not available in this app build.');
+      return;
+    }
+    if (!host || !Number.isInteger(count) || count < 1 || count > 10) {
+      setNativePingError('Enter a host and a whole-number count from 1 to 10.');
+      return;
+    }
+    if (!Number.isInteger(payloadSize) || payloadSize < 8 || payloadSize > 1400) {
+      setNativePingError('Payload size must be a whole number from 8 to 1,400 bytes.');
+      return;
+    }
+
+    if (nativePingTimeoutRef.current) clearTimeout(nativePingTimeoutRef.current);
+    const requestId = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    nativePingRequestRef.current = requestId;
+    setIsNativePinging(true);
+    setNativePingProgress(null);
+    setNativePingLiveReplies([]);
+    setNativePingResult(null);
+    setNativePingError(null);
+    nativePingTimeoutRef.current = setTimeout(() => {
+      if (nativePingRequestRef.current !== requestId) return;
+      nativePingRequestRef.current = null;
+      nativePingTimeoutRef.current = null;
+      setIsNativePinging(false);
+      setNativePingProgress(null);
+      setNativePingError('No result arrived before the native ping timeout. Native ICMP may be unavailable on this device.');
+    }, 17_000);
+
+    try {
+      const accepted = bridge.runNativePing(host, count, payloadSize, requestId);
+      if (!accepted) {
+        if (nativePingTimeoutRef.current) clearTimeout(nativePingTimeoutRef.current);
+        nativePingTimeoutRef.current = null;
+        nativePingRequestRef.current = null;
+        setIsNativePinging(false);
+        setNativePingProgress(null);
+        setNativePingError('Android rejected the ping request. Check the host, count, and payload size.');
+      }
+    } catch {
+      if (nativePingTimeoutRef.current) clearTimeout(nativePingTimeoutRef.current);
+      nativePingTimeoutRef.current = null;
+      nativePingRequestRef.current = null;
+      setIsNativePinging(false);
+      setNativePingProgress(null);
+      setNativePingError('The Android ping bridge could not be reached. Restart the app and try again.');
+    }
+  };
+
   const handleRunWifiScan = () => {
     if (!canUseWifiScan) {
       setWifiScanMessage('Nearby Wi-Fi scanning requires the Android app; browsers do not expose Wi-Fi scan results.');
@@ -376,18 +578,22 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
     const runProbe = async () => {
       const controller = new AbortController();
       pingControllerRef.current = controller;
-
-      const result = await measureLatency({
-        targetUrl: pingTarget,
-        sampleCount: 1,
-        timeoutMs: 1500,
-        signal: controller.signal,
-      });
+      let latencyMs: number | null = null;
+      try {
+        const result = await measureLatency({
+          targetUrl: pingTarget,
+          sampleCount: 1,
+          timeoutMs: 1500,
+          signal: controller.signal,
+        });
+        latencyMs = result.samples[0]?.latencyMs ?? null;
+      } catch {
+        latencyMs = null;
+      }
 
       if (isCancelled || controller.signal.aborted) return;
 
-      const latencyMs = result.samples[0]?.latencyMs;
-      setRollingPingSamples((previous) => [...previous.slice(-24), latencyMs ?? 999]);
+      setRollingPingSamples((previous) => [...previous.slice(-23), latencyMs]);
       nextProbeTimeout = setTimeout(() => void runProbe(), 700);
     };
 
@@ -405,50 +611,42 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
   const handleRunDnsBenchmark = async () => {
     setIsBenchmarkingDns(true);
     setDnsRankings([]);
-    const providers = [
-      { name: 'Cloudflare', domain: 'cloudflare.com', ip: '1.1.1.1' },
-      { name: 'Google Public DNS', domain: 'google.com', ip: '8.8.8.8' },
-      { name: 'Quad9 DNS', domain: 'quad9.net', ip: '9.9.9.9' },
-      { name: 'OpenDNS', domain: 'opendns.com', ip: '208.67.222.222' },
-    ];
-
-    const results = [];
-    for (const p of providers) {
-      try {
-        const res = await measureDnsTiming(p.domain);
-        results.push({
-          name: p.name,
-          ip: p.ip,
-          durationMs: res.durationMs,
-        });
-      } catch {
-        results.push({ name: p.name, ip: p.ip, durationMs: null });
-      }
+    try {
+      const results = await Promise.all(
+        DNS_BENCHMARK_RESOLVERS.map(async (resolver) => ({
+          name: resolver.name,
+          ...await measureDnsResolverTiming(resolver, 'example.com'),
+        }))
+      );
+      results.sort((a, b) => (a.durationMs ?? Number.POSITIVE_INFINITY) - (b.durationMs ?? Number.POSITIVE_INFINITY));
+      setDnsRankings(results);
+    } finally {
+      setIsBenchmarkingDns(false);
     }
-
-    // Sort by fastest duration
-    results.sort((a, b) => (a.durationMs || 999) - (b.durationMs || 999));
-    setDnsRankings(results);
-    setIsBenchmarkingDns(false);
   };
 
   // Run Router Distance Ping
   const handleRunGatewayPing = async () => {
     setIsPingingGateway(true);
     setGatewayResult(null);
+    setGatewayError(null);
     try {
       const res = await measureLatency({
-        targetUrl: gatewayTarget,
+        targetUrl: defaultTestEndpoints.ping,
         sampleCount: 8,
       });
       if (res.medianMs !== null) {
         setGatewayResult({
-          minMs: res.minMs || 0,
-          medianMs: res.medianMs || 0,
-          maxMs: res.maxMs || 0,
-          jitterMs: res.jitterMs || 0,
+          minMs: res.minMs,
+          medianMs: res.medianMs,
+          maxMs: res.maxMs,
+          jitterMs: res.jitterMs,
         });
+      } else {
+        setGatewayError(res.errorMessage || 'No successful endpoint probes were received.');
       }
+    } catch {
+      setGatewayError('The endpoint probe failed. Check the configured URL and try again.');
     } finally {
       setIsPingingGateway(false);
     }
@@ -456,17 +654,47 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
 
   // Run Reachability Check
   const handleCheckReach = async () => {
+    let target: URL;
+    try {
+      target = new URL(reachTarget.trim());
+    } catch {
+      setReachResult({ status: 'Enter a valid HTTP or HTTPS URL.', durationMs: 0, reachable: false });
+      return;
+    }
+    if (!['http:', 'https:'].includes(target.protocol) || target.username || target.password) {
+      setReachResult({ status: 'Use an HTTP or HTTPS URL without embedded credentials.', durationMs: 0, reachable: false });
+      return;
+    }
+
     setIsCheckingReach(true);
     setReachResult(null);
     const start = performance.now();
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 8_000);
     try {
-      const res = await fetch(reachTarget, { mode: 'no-cors', cache: 'no-store' });
+      const res = await fetch(target.toString(), {
+        mode: 'no-cors',
+        cache: 'no-store',
+        credentials: 'omit',
+        signal: controller.signal,
+      });
       const durationMs = Math.round(performance.now() - start);
-      setReachResult({ status: 'Connected', durationMs, reachable: true });
-    } catch (err) {
+      setReachResult({
+        status: res.type === 'opaque' ? 'Request completed; HTTP status hidden by browser' : `HTTP ${res.status}`,
+        durationMs,
+        reachable: true,
+      });
+    } catch {
       const durationMs = Math.round(performance.now() - start);
-      setReachResult({ status: 'Failed/Timeout', durationMs, reachable: false });
+      setReachResult({
+        status: controller.signal.aborted
+          ? 'Request timed out; browser cannot expose the underlying network error.'
+          : 'No response; browser cannot distinguish DNS, TLS, or network failures.',
+        durationMs,
+        reachable: false,
+      });
     } finally {
+      clearTimeout(timeoutId);
       setIsCheckingReach(false);
     }
   };
@@ -804,16 +1032,168 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
           </div>
         ) : null}
 
+        {canUseNativePing && (
+          <section className="md:col-span-2 space-y-3.5 rounded-2xl border border-cyan-500/20 bg-[#0E1A2E] p-4 shadow-xl sm:p-5" aria-labelledby="native-ping-heading">
+            <div className="flex items-center gap-2 text-cyan-300">
+              <Activity className="h-4 w-4" aria-hidden="true" />
+              <h3 id="native-ping-heading" className="text-sm font-bold text-white">Native ICMP Ping</h3>
+            </div>
+            <p className="text-xs leading-relaxed text-slate-400">
+              Sends real ICMP echo requests from Android. Payload size is ICMP data only, excluding network headers. Limits: 1–10 probes and 8–1,400 bytes.
+            </p>
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_7rem_9rem_auto] sm:items-end">
+              <label htmlFor="native-ping-host" className="block min-w-0 space-y-1 text-[10px] text-slate-400">
+                <span>Host or IP address</span>
+                <input
+                  id="native-ping-host"
+                  type="text"
+                  value={nativePingHost}
+                  onChange={(event) => setNativePingHost(event.target.value)}
+                  autoCapitalize="none"
+                  autoCorrect="off"
+                  spellCheck={false}
+                  className="min-h-11 w-full rounded-lg border border-white/10 bg-slate-900 px-3 text-xs font-mono text-slate-200"
+                />
+              </label>
+              <label htmlFor="native-ping-count" className="block space-y-1 text-[10px] text-slate-400">
+                <span>Probe count</span>
+                <input
+                  id="native-ping-count"
+                  type="number"
+                  min={1}
+                  max={10}
+                  step={1}
+                  value={nativePingCount}
+                  onChange={(event) => setNativePingCount(event.target.value)}
+                  className="min-h-11 w-full rounded-lg border border-white/10 bg-slate-900 px-3 text-xs text-slate-200"
+                />
+              </label>
+              <label htmlFor="native-ping-size" className="block space-y-1 text-[10px] text-slate-400">
+                <span>Payload bytes</span>
+                <input
+                  id="native-ping-size"
+                  type="number"
+                  min={8}
+                  max={1400}
+                  step={1}
+                  value={nativePingPayloadSize}
+                  onChange={(event) => setNativePingPayloadSize(event.target.value)}
+                  className="min-h-11 w-full rounded-lg border border-white/10 bg-slate-900 px-3 text-xs text-slate-200"
+                />
+              </label>
+              <button
+                type="button"
+                onClick={handleRunNativePing}
+                disabled={isNativePinging}
+                className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:cursor-wait disabled:opacity-60"
+              >
+                {isNativePinging && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+                {isNativePinging ? 'Pinging…' : 'Run ping'}
+              </button>
+            </div>
+
+            {isNativePinging && nativePingProgress && (
+              <div className="space-y-2 rounded-xl border border-cyan-500/20 bg-cyan-950/20 p-3" role="status" aria-live="polite">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-[11px]">
+                  <span className="font-semibold text-cyan-100">Pinging {nativePingProgress.host}</span>
+                  <span className="text-slate-300">
+                    {nativePingProgress.sent}/{nativePingProgress.count} sent · {nativePingProgress.received} replies
+                  </span>
+                </div>
+                <div className="max-h-36 space-y-1 overflow-y-auto font-mono text-[10px] text-slate-300">
+                  {nativePingLiveReplies.map((progress) => (
+                    <p key={progress.sent} className="break-all">
+                      {progress.line}
+                    </p>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {nativePingError && (
+              <p className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-200" role="alert">
+                {nativePingError}
+              </p>
+            )}
+            {nativePingResult && (
+              <details
+                className={`group overflow-hidden rounded-xl border ${
+                  nativePingResult.status === 'success'
+                    ? 'border-emerald-500/20 bg-emerald-950/20'
+                    : nativePingResult.status === 'partial'
+                    ? 'border-amber-500/20 bg-amber-950/20'
+                    : 'border-rose-500/20 bg-rose-950/20'
+                }`}
+                aria-label={`Ping results for ${nativePingResult.host}`}
+              >
+                <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 outline-none transition-colors hover:bg-white/[0.03] focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-cyan-400 [&::-webkit-details-marker]:hidden">
+                  <span className="min-w-0">
+                    <span
+                      className={`block text-xs font-semibold ${
+                        nativePingResult.status === 'success'
+                          ? 'text-emerald-200'
+                          : nativePingResult.status === 'partial'
+                          ? 'text-amber-200'
+                          : 'text-rose-200'
+                      }`}
+                      role="status"
+                      aria-live="polite"
+                    >
+                      {nativePingResult.status === 'success'
+                        ? 'Ping results'
+                        : nativePingResult.status === 'partial'
+                        ? 'Partial ping results'
+                        : 'Ping failed'}
+                    </span>
+                    <span className="mt-0.5 block truncate text-[10px] text-slate-300">
+                      {nativePingResult.host} · {nativePingResult.received}/{nativePingResult.sent} replies · {nativePingResult.lossPercent.toFixed(0)}% loss
+                    </span>
+                  </span>
+                  <ChevronDown className="h-4 w-4 shrink-0 text-cyan-300 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="space-y-3 border-t border-white/10 p-3" role={nativePingResult.status === 'failed' ? 'alert' : 'status'} aria-live="polite">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="text-xs font-semibold text-slate-100">{nativePingResult.message}</p>
+                    <span className="text-[10px] text-slate-400">{nativePingResult.payloadSize}-byte payload</span>
+                  </div>
+                  <dl className="grid grid-cols-2 gap-2 sm:grid-cols-5">
+                    {[
+                      ['Replies', `${nativePingResult.received}/${nativePingResult.sent}`],
+                      ['Loss', `${nativePingResult.lossPercent.toFixed(0)}%`],
+                      ['Min', formatToolLatency(nativePingResult.minMs)],
+                      ['Average', formatToolLatency(nativePingResult.avgMs)],
+                      ['Max', formatToolLatency(nativePingResult.maxMs)],
+                    ].map(([label, value]) => (
+                      <div key={label} className="rounded-lg border border-white/5 bg-slate-950/40 p-2">
+                        <dt className="text-[10px] text-slate-400">{label}</dt>
+                        <dd className="mt-0.5 font-mono text-xs font-semibold text-slate-100">{value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                  {nativePingResult.samples.length > 0 && (
+                    <p className="break-words font-mono text-[10px] text-slate-400">
+                      Reply times: {nativePingResult.samples.map((sample) => `${sample.toFixed(1)} ms`).join(' · ')}
+                    </p>
+                  )}
+                </div>
+              </details>
+            )}
+          </section>
+        )}
+
         {/* Tool 1: Continuous Ping & Jitter Monitor */}
         <div className="p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-cyan-400">
               <Activity className="w-4 h-4" />
-              <h3 className="text-sm font-bold text-white">Continuous Ping Monitor</h3>
+              <h3 className="text-sm font-bold text-white">Continuous HTTPS RTT Monitor</h3>
             </div>
             <button
+              type="button"
               onClick={() => setIsMonitoringPing(!isMonitoringPing)}
-              className={`px-3 py-1 rounded-xl text-xs font-semibold flex items-center space-x-1 cursor-pointer transition-all ${
+              aria-pressed={isMonitoringPing}
+              className={`inline-flex min-h-11 items-center space-x-1 rounded-xl px-3 text-xs font-semibold cursor-pointer transition-all ${
                 isMonitoringPing
                   ? 'bg-rose-950/80 text-rose-300 border border-rose-800'
                   : 'bg-cyan-600 hover:bg-cyan-500 text-white'
@@ -824,36 +1204,44 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
             </button>
           </div>
           <p className="text-xs text-slate-400">
-            Real-time rolling RTT latency graph to inspect jitter anomalies and packet spikes.
+            Rolling HTTPS request round-trip time, not ICMP ping. Red markers indicate failed probes.
           </p>
 
-          <input
-            type="text"
-            value={pingTarget}
-            onChange={(e) => setPingTarget(e.target.value)}
-            className="w-full bg-slate-900 border border-white/10 rounded-lg p-2 text-xs font-mono text-slate-200"
-          />
+          <label htmlFor="continuous-ping-target" className="block space-y-1 text-[10px] text-slate-400">
+            <span>HTTPS probe target</span>
+            <input
+              id="continuous-ping-target"
+              type="url"
+              value={pingTarget}
+              onChange={(e) => setPingTarget(e.target.value)}
+              className="w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-xs font-mono text-slate-200"
+            />
+          </label>
 
           {/* Rolling Graph Visualization */}
-          <div className="h-24 bg-slate-900/90 rounded-xl border border-white/5 p-2 flex items-end justify-between gap-1 overflow-hidden">
+          <div
+            role="img"
+            aria-label="Recent HTTPS round-trip samples; red markers indicate failed probes"
+            className="h-24 bg-slate-900/90 rounded-xl border border-white/5 p-2 flex items-end justify-between gap-1 overflow-hidden"
+          >
             {rollingPingSamples.length === 0 ? (
               <span className="text-[11px] text-slate-600 m-auto font-mono">
                 Tap Start to begin live latency stream
               </span>
             ) : (
               rollingPingSamples.map((ms, idx) => {
-                const heightPct = Math.min(100, Math.max(10, (ms / 150) * 100));
-                const isDropped = ms >= 999;
+                const isDropped = ms === null;
+                const heightPct = isDropped ? 6 : Math.min(100, Math.max(10, (ms / 150) * 100));
                 return (
                   <div
                     key={idx}
                     className="flex-1 flex flex-col items-center justify-end h-full"
-                    title={`${ms} ms`}
+                    title={isDropped ? 'Probe failed' : `${ms} ms`}
                   >
                     <div
                       style={{ height: `${heightPct}%` }}
                       className={`w-full rounded-t-sm transition-all ${
-                        isDropped ? 'bg-rose-500' : ms > 80 ? 'bg-amber-400' : 'bg-cyan-400'
+                        isDropped ? 'bg-rose-500' : ms !== null && ms > 80 ? 'bg-amber-400' : 'bg-cyan-400'
                       }`}
                     />
                   </div>
@@ -861,6 +1249,13 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
               })
             )}
           </div>
+          {rollingPingSamples.length > 0 && (
+            <p className="text-[10px] text-slate-400" role="status">
+              Latest probe: {rollingPingSamples[rollingPingSamples.length - 1] === null
+                ? 'failed'
+                : formatToolLatency(rollingPingSamples[rollingPingSamples.length - 1])}
+            </p>
+          )}
         </div>
 
         {/* Tool 2: Standalone Bufferbloat Diagnostic */}
@@ -872,7 +1267,7 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
             </div>
           </div>
           <p className="text-xs text-slate-400">
-            Measures latency increase under simultaneous network load to grade router queuing delay.
+            Measures latency under a controlled download load of up to 5 MiB. This can briefly affect other devices on your network.
           </p>
 
           <button
@@ -885,30 +1280,54 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
                   loadTargetUrl: defaultTestEndpoints.download,
                 });
                 setBloatSummary(res);
+              } catch {
+                setBloatSummary({
+                  status: 'failed',
+                  baselineLatencyMs: null,
+                  underLoadLatencyMs: null,
+                  postLoadLatencyMs: null,
+                  loadedDeltaMs: null,
+                  bufferbloatGrade: 'unknown',
+                  severityDescription: 'The Bufferbloat probe failed before usable measurements were returned.',
+                  limitations: [],
+                });
               } finally {
                 setIsTestingBloat(false);
               }
             }}
             disabled={isTestingBloat}
-            className="w-full py-2.5 rounded-xl bg-amber-600 hover:bg-amber-500 text-white font-semibold text-xs transition-all flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
+            className="min-h-11 w-full rounded-xl bg-amber-600 py-2.5 text-xs font-semibold text-white transition-all hover:bg-amber-500 flex items-center justify-center space-x-1.5 disabled:opacity-50 cursor-pointer"
           >
             {isTestingBloat ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4" />}
             <span>{isTestingBloat ? 'Measuring Queue Delta...' : 'Test Bufferbloat Under Load'}</span>
           </button>
 
           {bloatSummary && (
-            <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-2 text-xs font-mono">
+            <div
+              className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-2 text-xs"
+              role={bloatSummary.status === 'success' ? 'status' : 'alert'}
+            >
               <div className="flex justify-between items-center">
-                <span className="text-slate-400">Bufferbloat Grade:</span>
-                <span className="text-sm font-bold text-amber-400 px-2 py-0.5 rounded bg-amber-950 border border-amber-800">
-                  Grade {bloatSummary.bufferbloatGrade}
+                <span className="text-slate-400">Bufferbloat result:</span>
+                <span className={`text-sm font-bold px-2 py-0.5 rounded border ${
+                  bloatSummary.status === 'success'
+                    ? 'text-amber-400 bg-amber-950 border-amber-800'
+                    : 'text-rose-300 bg-rose-950 border-rose-800'
+                }`}>
+                  {bloatSummary.status === 'success' && bloatSummary.bufferbloatGrade !== 'unknown'
+                    ? `Grade ${bloatSummary.bufferbloatGrade}`
+                    : 'Inconclusive'}
                 </span>
               </div>
-              <div className="grid grid-cols-3 gap-1 text-center text-[11px]">
-                <div>Base: {bloatSummary.baselineLatencyMs}ms</div>
-                <div className="text-rose-300">Under Load: {bloatSummary.underLoadLatencyMs}ms</div>
-                <div className="text-amber-300">Delta: +{bloatSummary.loadedDeltaMs}ms</div>
+              <p className="text-slate-300">{bloatSummary.severityDescription}</p>
+              <div className="grid grid-cols-1 gap-1 text-[11px] sm:grid-cols-3 sm:text-center">
+                <div>Base: {formatToolLatency(bloatSummary.baselineLatencyMs)}</div>
+                <div className="text-rose-300">Under load: {formatToolLatency(bloatSummary.underLoadLatencyMs)}</div>
+                <div className="text-amber-300">Delta: {formatToolLatency(bloatSummary.loadedDeltaMs)}</div>
               </div>
+              {bloatSummary.status !== 'success' && bloatSummary.limitations.length > 0 && (
+                <p className="text-amber-200">{bloatSummary.limitations.join(' ')}</p>
+              )}
             </div>
           )}
         </div>
@@ -918,19 +1337,19 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-2 text-emerald-400">
               <Globe className="w-4 h-4" />
-              <h3 className="text-sm font-bold text-white">DNS Resolver Benchmark</h3>
+              <h3 className="text-sm font-bold text-white">DoH Resolver Comparison</h3>
             </div>
             <button
               onClick={handleRunDnsBenchmark}
               disabled={isBenchmarkingDns}
-              className="px-3 py-1 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+              className="inline-flex min-h-11 items-center space-x-1 rounded-xl bg-emerald-600 px-3 text-xs font-semibold text-white hover:bg-emerald-500 disabled:opacity-50 cursor-pointer"
             >
               {isBenchmarkingDns ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
               <span>Benchmark</span>
             </button>
           </div>
           <p className="text-xs text-slate-400">
-            Benchmark domain resolution time across major DNS resolvers to find the fastest response.
+            Sends the same example.com A query to Cloudflare and Google Public DNS. DoH RTT includes HTTPS and network overhead, not just resolver processing.
           </p>
 
           {dnsRankings.length > 0 ? (
@@ -938,21 +1357,27 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
               {dnsRankings.map((r, idx) => (
                 <div
                   key={r.name}
-                  className="p-2 rounded-lg bg-slate-900/80 border border-white/5 flex items-center justify-between"
+                  className="space-y-1 p-2 rounded-lg bg-slate-900/80 border border-white/5"
                 >
-                  <div className="flex items-center space-x-2">
-                    <span className="text-cyan-400 font-bold">#{idx + 1}</span>
-                    <span className="text-slate-200">{r.name} ({r.ip})</span>
+                  <div className="flex min-w-0 items-center justify-between gap-2">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="text-cyan-400 font-bold">{r.durationMs === null ? '—' : `#${idx + 1}`}</span>
+                      <span className="truncate text-slate-200">{r.name}</span>
+                    </div>
+                    <div className="shrink-0 text-right">
+                      <span className={`font-bold ${r.durationMs !== null ? 'text-emerald-400' : 'text-rose-300'}`}>
+                        {r.durationMs !== null ? `${r.durationMs} ms DoH RTT` : 'Failed'}
+                      </span>
+                      {r.resolvedIp && <span className="block text-[10px] text-slate-500">A {r.resolvedIp}</span>}
+                    </div>
                   </div>
-                  <span className="font-bold text-emerald-400">
-                    {r.durationMs !== null ? `${r.durationMs} ms` : 'Failed'}
-                  </span>
+                  {r.errorMessage && <p className="text-[10px] text-rose-300">{r.errorMessage}</p>}
                 </div>
               ))}
             </div>
           ) : (
             <div className="p-4 rounded-xl bg-slate-900/40 border border-white/5 text-center text-xs text-slate-500">
-              Tap Benchmark to test Cloudflare, Google, and Quad9.
+              Run the same DNS-over-HTTPS query against both providers.
             </div>
           )}
         </div>
@@ -965,33 +1390,82 @@ export const DiagnosticToolsTab: React.FC<DiagnosticToolsTabProps> = ({ networkI
               <h3 className="text-sm font-bold text-white">Remote Endpoint Latency</h3>
             </div>
             <button
+              type="button"
               onClick={handleRunGatewayPing}
               disabled={isPingingGateway}
-              className="px-3 py-1 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold flex items-center space-x-1 disabled:opacity-50 cursor-pointer"
+              className="inline-flex min-h-11 items-center space-x-1 rounded-xl bg-indigo-600 px-3 text-xs font-semibold text-white hover:bg-indigo-500 disabled:opacity-50 cursor-pointer"
             >
               {isPingingGateway ? <Loader2 className="w-3 h-3 animate-spin" /> : <Play className="w-3 h-3" />}
               <span>Probe Endpoint</span>
             </button>
           </div>
           <p className="text-xs text-slate-400">
-            Measures HTTP round-trip time to the test endpoint; this is not a router or ICMP ping.
+            Measures HTTPS request round-trip time to the configured test endpoint; it is not a router or ICMP ping.
           </p>
 
           {gatewayResult ? (
             <div className="p-3 rounded-xl bg-slate-900 border border-white/5 font-mono text-xs space-y-1">
               <div className="flex justify-between">
                 <span className="text-slate-400">Median Endpoint RTT:</span>
-                <span className="font-bold text-indigo-300">{gatewayResult.medianMs} ms</span>
+                <span className="font-bold text-indigo-300">{formatToolLatency(gatewayResult.medianMs)}</span>
               </div>
               <div className="flex justify-between text-slate-400 text-[11px]">
-                <span>Min: {gatewayResult.minMs}ms • Max: {gatewayResult.maxMs}ms</span>
-                <span>Jitter: {gatewayResult.jitterMs}ms</span>
+                <span>Min: {formatToolLatency(gatewayResult.minMs)} · Max: {formatToolLatency(gatewayResult.maxMs)}</span>
+                <span>Jitter: {formatToolLatency(gatewayResult.jitterMs)}</span>
               </div>
             </div>
+          ) : gatewayError ? (
+            <p className="rounded-xl border border-rose-500/20 bg-rose-950/20 p-3 text-xs text-rose-200" role="alert">
+              {gatewayError}
+            </p>
           ) : (
             <div className="p-4 rounded-xl bg-slate-900/40 border border-white/5 text-center text-xs text-slate-500">
               Run a round-trip latency test against the configured HTTP endpoint.
             </div>
+          )}
+        </div>
+
+        <div className="md:col-span-2 p-4 sm:p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-3.5 shadow-xl">
+          <div className="flex items-center gap-2 text-cyan-300">
+            <Server className="h-4 w-4" aria-hidden="true" />
+            <h3 className="text-sm font-bold text-white">Web Endpoint Reachability</h3>
+          </div>
+          <p className="text-xs text-slate-400">
+            Checks an HTTP(S) request only; cross-origin status is hidden, and this does not scan ports.
+          </p>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+            <label htmlFor="reachability-target" className="block space-y-1 text-[10px] text-slate-400">
+              <span>HTTP(S) target URL</span>
+              <input
+                id="reachability-target"
+                type="url"
+                value={reachTarget}
+                onChange={(event) => setReachTarget(event.target.value)}
+                className="w-full rounded-lg border border-white/10 bg-slate-900 p-2 text-xs font-mono text-slate-200"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={handleCheckReach}
+              disabled={isCheckingReach}
+              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-600 px-4 text-xs font-semibold text-white transition-colors hover:bg-cyan-500 disabled:opacity-50"
+            >
+              {isCheckingReach && <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />}
+              {isCheckingReach ? 'Checking…' : 'Check endpoint'}
+            </button>
+          </div>
+          {reachResult && (
+            <p
+              className={`rounded-xl border p-3 text-xs ${
+                reachResult.reachable
+                  ? 'border-emerald-500/20 bg-emerald-950/20 text-emerald-200'
+                  : 'border-rose-500/20 bg-rose-950/20 text-rose-200'
+              }`}
+              role={reachResult.reachable ? 'status' : 'alert'}
+            >
+              {reachResult.status}
+              {reachResult.durationMs > 0 && ` · ${reachResult.durationMs} ms`}
+            </p>
           )}
         </div>
       </div>

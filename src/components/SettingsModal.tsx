@@ -3,11 +3,9 @@ import {
   X,
   Settings,
   Server,
-  Layers,
   ShieldCheck,
   RotateCcw,
-  Gauge,
-  Sliders,
+  Info,
 } from 'lucide-react';
 import { SCORING_RULE_VERSION } from '../config/thresholds';
 import { getDefaultTestEndpoints } from '../engines/testEndpoints';
@@ -15,10 +13,9 @@ import { getDefaultTestEndpoints } from '../engines/testEndpoints';
 interface SettingsModalProps {
   isOpen: boolean;
   onClose: () => void;
+  onOpenAbout: () => void;
   pingTarget: string;
   setPingTarget: (val: string) => void;
-  dnsDomain: string;
-  setDnsDomain: (val: string) => void;
   maxDownloadMb: number;
   setMaxDownloadMb: (val: number) => void;
   maxUploadMb: number;
@@ -38,10 +35,9 @@ interface SettingsModalProps {
 export const SettingsModal: React.FC<SettingsModalProps> = ({
   isOpen,
   onClose,
+  onOpenAbout,
   pingTarget,
   setPingTarget,
-  dnsDomain,
-  setDnsDomain,
   maxDownloadMb,
   setMaxDownloadMb,
   maxUploadMb,
@@ -103,7 +99,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const handleReset = () => {
     const defaultEndpoints = getDefaultTestEndpoints();
     setPingTarget(defaultEndpoints.ping);
-    setDnsDomain('1.1.1.1');
     setMaxDownloadMb(8);
     setMaxUploadMb(4);
     setBenchmarkMode(true);
@@ -134,13 +129,24 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <span className="text-[11px] text-slate-400 font-mono">SpeedXpat v1.0 • Engine {SCORING_RULE_VERSION}</span>
             </div>
           </div>
-          <button
-            onClick={onClose}
-            aria-label="Close diagnostics and test settings"
-            className="grid h-11 w-11 place-items-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onOpenAbout}
+              aria-label="About SpeedXpat"
+              title="About SpeedXpat"
+              className="grid h-11 w-11 place-items-center rounded-lg text-slate-400 transition-colors hover:bg-slate-800 hover:text-cyan-300"
+            >
+              <Info className="h-4 w-4" aria-hidden="true" />
+            </button>
+            <button
+              onClick={onClose}
+              aria-label="Close diagnostics and test settings"
+              className="grid h-11 w-11 place-items-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
         {/* Form Controls */}

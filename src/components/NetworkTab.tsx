@@ -273,6 +273,12 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
     : accessPointVendor.status === 'error'
     ? 'Lookup unavailable'
     : 'Not available';
+  const connectionQualityMetricCount =
+    Number(networkInfo?.downlinkMbps !== undefined) +
+    Number(isAndroidApp && isWifi) * 3 +
+    Number(isCellular && Boolean(networkInfo?.cellularGeneration)) +
+    Number(isCellular && Boolean(networkInfo?.cellularCarrier)) +
+    Number(Boolean(networkInfo?.ispName));
 
   return (
     <div className="max-w-3xl mx-auto space-y-5 pb-20">
@@ -283,10 +289,8 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
             <Wifi className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-white">Network</h2>
-            <p className="text-xs text-slate-400">
-              Connection status and technical details
-            </p>
+            <h2 className="text-lg font-bold text-white">Connection overview</h2>
+            <p className="text-xs text-slate-400">Status, quality, diagnostics, and technical details</p>
           </div>
         </div>
 
@@ -401,7 +405,13 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         <p className="mt-1 text-xs text-slate-400">
           Device-reported radio details are not a speed test.
         </p>
-        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
+        <div className={`mt-3 grid grid-cols-2 gap-2 ${
+          connectionQualityMetricCount >= 4
+            ? 'sm:grid-cols-4'
+            : connectionQualityMetricCount === 3
+            ? 'sm:grid-cols-3'
+            : ''
+        }`}>
           {networkInfo?.downlinkMbps !== undefined && (
             <div className="rounded-xl border border-white/5 bg-slate-900/80 p-3">
               <span className="block text-[10px] uppercase text-slate-400">Reported downlink</span>
@@ -563,7 +573,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         </summary>
         <div className="space-y-4 border-t border-white/10 p-4">
       {/* ISP identity comes from a separate public IP-to-ASN lookup. */}
-      <div className="p-5 rounded-2xl bg-[#0E1A2E] border border-cyan-500/30 space-y-4 shadow-xl">
+      <div className="space-y-4 border-b border-white/10 pb-4">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center space-x-2 text-cyan-400">
             <Globe className="w-4 h-4" />
@@ -575,7 +585,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
         </p>
 
         {/* IP-to-ASN and geolocation telemetry */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs font-mono">
+        <div className="grid grid-cols-2 gap-2.5 text-xs font-mono">
           <div className="p-3 rounded-xl bg-slate-900/80 border border-white/5 space-y-1">
             <span className="text-[10px] text-slate-400 block uppercase">Autonomous System</span>
             <span className="text-sm font-bold text-cyan-300 truncate block" title={networkInfo?.asn}>
@@ -615,7 +625,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               <button
                 onClick={() => row.val && copyToClipboard(row.key, row.val)}
                 disabled={!row.val}
-                className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                 title="Copy to clipboard"
               >
                 {copiedKey === row.key ? (
@@ -635,7 +645,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
       </div>
 
       {/* Device-level addresses and access point details */}
-      <div className="p-5 rounded-2xl bg-[#0E1A2E] border border-white/10 space-y-4 shadow-xl">
+      <div className="space-y-4">
         <div className="flex items-center justify-between border-b border-white/5 pb-3">
           <div className="flex items-center space-x-2">
             <Network className="w-4 h-4 text-cyan-400" />
@@ -682,7 +692,7 @@ export const NetworkTab: React.FC<NetworkTabProps> = ({
               <button
                 onClick={() => row.val !== unavailable && showSensitiveDetails && copyToClipboard(row.key, row.val)}
                 disabled={row.val === unavailable || !showSensitiveDetails}
-                className="min-h-11 min-w-11 rounded-lg bg-slate-800 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
+                className="inline-flex min-h-11 min-w-11 shrink-0 items-center justify-center rounded-lg bg-slate-800 text-slate-300 transition-colors hover:bg-slate-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-40"
                 title="Copy to clipboard"
                 aria-label={`Copy ${row.label}`}
               >
