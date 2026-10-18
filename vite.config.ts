@@ -1,7 +1,10 @@
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
+import { readFileSync } from 'node:fs';
 import path from 'path';
 import {defineConfig} from 'vite';
+
+const packageVersion = (JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')) as { version: string }).version;
 
 export default defineConfig(({ command }) => {
   const devCspPlugin = {
@@ -16,6 +19,9 @@ export default defineConfig(({ command }) => {
 
   return {
     plugins: [react(), tailwindcss(), ...(command === 'serve' ? [devCspPlugin] : [])],
+    define: {
+      'import.meta.env.VITE_APP_VERSION': JSON.stringify(process.env.VITE_APP_VERSION || packageVersion),
+    },
     resolve: {
       alias: {
         '@': path.resolve(__dirname, '.'),

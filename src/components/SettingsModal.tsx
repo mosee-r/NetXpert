@@ -126,7 +126,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             </div>
             <div>
               <h2 id={titleId} className="text-base font-bold text-white">Diagnostics & Test Settings</h2>
-              <span className="text-[11px] text-slate-400 font-mono">SpeedXpat v1.0 • Engine {SCORING_RULE_VERSION}</span>
+              <span className="text-[11px] text-slate-400 font-mono">SpeedXpat v{import.meta.env.VITE_APP_VERSION} · Engine {SCORING_RULE_VERSION}</span>
             </div>
           </div>
           <div className="flex items-center gap-1">

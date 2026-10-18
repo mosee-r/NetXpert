@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, FileText, HelpCircle, RotateCcw, Save, Share2, Trash2, X, XCircle } from 'lucide-react';
 import { DeviceNetworkInfo, ThroughputChartPoint } from '../types/network';
 import { ActivityRating, OverallAssessmentReport } from '../types/scoring';
@@ -17,6 +17,8 @@ const TEST_PHASES = [
   { key: 'diagnostics', label: 'Checks' },
   { key: 'scoring', label: 'Score' },
 ] as const;
+
+const DESKTOP_VIEWPORT_QUERY = '(min-width: 64rem)';
 
 const PHASE_STAGE_INDEX: Partial<Record<AssessmentStage, number>> = {
   detecting_network: 0,
@@ -266,7 +268,15 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
     ? XCircle
     : HelpCircle;
   const [showPublicIp, setShowPublicIp] = useState(false);
-  const idleLatency = report?.rawMeasurements.idleLatency.medianMs ?? null;
+  const [isActivitySuitabilityOpen, setIsActivitySuitabilityOpen] = useState(() =>
+    typeof window !== 'undefined' && window.matchMedia(DESKTOP_VIEWPORT_QUERY).matches
+  );
+  useEffect(() => {
+    const desktopViewport = window.matchMedia(DESKTOP_VIEWPORT_QUERY);
+    const updateDefaultState = () => setIsActivitySuitabilityOpen(desktopViewport.matches);
+    desktopViewport.addEventListener('change', updateDefaultState);
+    return () => desktopViewport.removeEventListener('change', updateDefaultState);
+  }, []);
   const formatTransferSize = (bytes?: number) => {
     if (!bytes) return 'large transfer';
     const megabytes = bytes / (1024 * 1024);
@@ -436,21 +446,17 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                 </div>
 
                 <div className="space-y-3">
-                  <div className="grid gap-2">
-                    <div className="rounded-xl border border-app-divider bg-app-raised/50 p-2.5">
-                      <div className="text-[10px] uppercase tracking-[0.14em] text-app-muted">Ping (idle)</div>
-                      <div className="mt-1 font-mono text-lg font-semibold text-app-primary">
-                        {idleLatency === null ? '—' : `${Math.round(idleLatency)} ms`}
-                      </div>
-                    </div>
-                  </div>
-                  <p className="text-[10px] leading-4 text-app-muted">HTTPS round-trip time; not raw ICMP ping.</p>
+                  <p className="text-[10px] leading-4 text-app-muted">Idle ping is an HTTPS round-trip time, not raw ICMP ping.</p>
 
                   <KeyMetricsList
                     metrics={metrics}
                     includeThroughput={false}
                     includeLatency={false}
                     additionalRows={[
+                      {
+                        label: 'Idle ping (HTTPS RTT)',
+                        value: metrics.idleLatencyMs === null ? 'Not measured' : `${Math.round(metrics.idleLatencyMs)} ms`,
+                      },
                       {
                         label: 'Jitter',
                         value: metrics.jitterMs === null ? 'Not measured' : `${metrics.jitterMs.toFixed(1)} ms`,
@@ -463,8 +469,10 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                           : `${report.rawMeasurements.dnsTiming.durationMs} ms`,
                       },
                       {
-                        label: 'Test Server',
-                        value: report.server?.name || report.networkInfo.testServer?.name || 'Not specified',
+                        label: 'Cloudflare edge',
+                        value: report.server?.colo
+                          ? `${report.server.colo}${report.server.edgeCountry ? ` · ${report.server.edgeCountry}` : ''}`
+                          : 'Location unavailable',
                       },
                       {
                         label: 'Public IP',
@@ -472,7 +480,7 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
                           ? showPublicIp ? report.networkInfo.ipAddress : maskIpAddress(report.networkInfo.ipAddress)
                           : 'Not recorded',
                       },
-                      { label: 'City', value: report.networkInfo.locationCity || report.server?.city || 'Not available' },
+                      { label: 'Network city', value: report.networkInfo.locationCity || 'Not available' },
                       ...(report.networkInfo.networkType !== 'unknown'
                         ? [{ label: 'Network', value: report.networkInfo.networkType }]
                         : []),
@@ -484,7 +492,12 @@ export const SpeedTestHome: React.FC<SpeedTestHomeProps> = ({
             </div>
 
             <div className="min-w-0">
-              <details className="group overflow-hidden rounded-xl border border-app-divider bg-app-surface/50" aria-label="Activity suitability">
+              <details
+                open={isActivitySuitabilityOpen}
+                onToggle={(event) => setIsActivitySuitabilityOpen(event.currentTarget.open)}
+                className="group overflow-hidden rounded-xl border border-app-divider bg-app-surface/50"
+                aria-label="Activity suitability"
+              >
                 <summary className="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-3 py-3 text-sm font-semibold text-app-primary outline-none transition-colors hover:bg-app-raised focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-app-accent sm:px-4 [&::-webkit-details-marker]:hidden">
                   <span>Activity suitability</span>
                   <ChevronDown className="h-4 w-4 shrink-0 text-app-accent-text transition-transform group-open:rotate-180" aria-hidden="true" />

@@ -196,6 +196,8 @@ export interface DeviceNetworkInfo {
     city?: string;
     latitude?: number;
     longitude?: number;
+    colo?: string;
+    edgeCountry?: string;
   };
   wifiSsid?: string;
   wifiBssid?: string;

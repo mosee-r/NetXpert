@@ -95,5 +95,7 @@ export interface OverallAssessmentReport {
     hostname: string;
     city?: string;
     country?: string;
+    colo?: string;
+    edgeCountry?: string;
   };
 }

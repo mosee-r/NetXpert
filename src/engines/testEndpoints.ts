@@ -194,6 +194,11 @@ export interface RequestTimeout {
   dispose: () => void;
 }
 
+export interface CloudflareEdgeLocation {
+  colo: string;
+  country?: string;
+}
+
 export function createRequestTimeout(
   parentSignal: AbortSignal | undefined,
   timeoutMs: number
@@ -221,6 +226,45 @@ export function createRequestTimeout(
       parentSignal?.removeEventListener('abort', onParentAbort);
     },
   };
+}
+
+export async function getCloudflareEdgeLocation(
+  hostname: string,
+  signal?: AbortSignal,
+  fetcher: typeof fetch = fetch
+): Promise<CloudflareEdgeLocation | null> {
+  if (!/^[a-z0-9.-]+$/i.test(hostname)) return null;
+
+  const requestTimeout = createRequestTimeout(signal, 3_000);
+  try {
+    const traceUrl = new URL('/cdn-cgi/trace', `https://${hostname}`);
+    traceUrl.searchParams.set('_t', String(Date.now()));
+    const response = await fetcher(traceUrl.toString(), {
+      headers: { Accept: 'text/plain' },
+      cache: 'no-store',
+      signal: requestTimeout.signal,
+    });
+    if (!response.ok) return null;
+
+    const trace = new Map(
+      (await response.text()).split(/\r?\n/).flatMap((line) => {
+        const separator = line.indexOf('=');
+        return separator < 0 ? [] : [[line.slice(0, separator), line.slice(separator + 1)]];
+      })
+    );
+    const colo = trace.get('colo')?.trim().toUpperCase();
+    const country = trace.get('loc')?.trim().toUpperCase();
+    if (!colo || !/^[A-Z0-9]{3,4}$/.test(colo)) return null;
+
+    return {
+      colo,
+      country: country && /^[A-Z]{2}$/.test(country) ? country : undefined,
+    };
+  } catch {
+    return null;
+  } finally {
+    requestTimeout.dispose();
+  }
 }
 
 export function getAndroidNativeBridge(): AndroidNativeBridge | undefined {

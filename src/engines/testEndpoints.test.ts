@@ -1,6 +1,31 @@
 import assert from 'node:assert/strict';
 import { describe, it, afterEach } from 'node:test';
-import { getAndroidFeatureState } from './testEndpoints';
+import { getAndroidFeatureState, getCloudflareEdgeLocation } from './testEndpoints';
+
+describe('getCloudflareEdgeLocation', () => {
+  it('reads the colo and country from a trace response without retaining the IP', async () => {
+    let requestedUrl = '';
+    const fetcher: typeof fetch = async (input) => {
+      requestedUrl = String(input);
+      return new Response('colo=NBO\nloc=KE\nip=203.0.113.10\n', { status: 200 });
+    };
+
+    const result = await getCloudflareEdgeLocation('speed.cloudflare.com', undefined, fetcher);
+
+    assert.equal(new URL(requestedUrl).hostname, 'speed.cloudflare.com');
+    assert.equal(new URL(requestedUrl).pathname, '/cdn-cgi/trace');
+    assert.deepEqual(result, { colo: 'NBO', country: 'KE' });
+    assert.equal(JSON.stringify(result).includes('203.0.113.10'), false);
+  });
+
+  it('returns null when trace data is unavailable or has no valid colo', async () => {
+    const unavailableFetcher: typeof fetch = async () => new Response('', { status: 503 });
+    const malformedFetcher: typeof fetch = async () => new Response('loc=KE\nip=203.0.113.10\n', { status: 200 });
+
+    assert.equal(await getCloudflareEdgeLocation('speed.cloudflare.com', undefined, unavailableFetcher), null);
+    assert.equal(await getCloudflareEdgeLocation('speed.cloudflare.com', undefined, malformedFetcher), null);
+  });
+});
 
 describe('getAndroidFeatureState', () => {
   afterEach(() => {

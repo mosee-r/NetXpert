@@ -17,6 +17,7 @@ import { assessAllActivities } from '../scoring/assessActivities';
 import { MlabDiagnosticsReport, OverallAssessmentReport } from '../types/scoring';
 import { ThroughputChartPoint } from '../types/network';
 import {
+  getCloudflareEdgeLocation,
   getTestEndpointsForServer,
   resolveServerSelection,
 } from './testEndpoints';
@@ -116,9 +117,10 @@ export class AssessmentOrchestrator {
     try {
       // 1. Detect network details and locate an independent M-Lab diagnostic server
       notify('detecting_network', 'Detecting network & locating diagnostic servers...', 10, 10);
-      const [networkInfo, mlabServer] = await Promise.all([
+      const [networkInfo, mlabServer, cloudflareEdge] = await Promise.all([
         detectNetworkInfo(),
         useMlab ? locateNearestMlabServer(signal) : Promise.resolve(null),
+        getCloudflareEdgeLocation(server.hostname, signal),
       ]);
       if (signal.aborted) throw new Error('Cancelled by user');
 
@@ -131,6 +133,8 @@ export class AssessmentOrchestrator {
           name: server.name,
           country: server.country,
           city: server.city,
+          colo: cloudflareEdge?.colo,
+          edgeCountry: cloudflareEdge?.country,
           latitude: server.latitude,
           longitude: server.longitude,
         },
@@ -502,6 +506,8 @@ export class AssessmentOrchestrator {
         hostname: server.hostname,
         city: server.city,
         country: server.country,
+        colo: cloudflareEdge?.colo,
+        edgeCountry: cloudflareEdge?.country,
       };
 
       notify('complete', 'Assessment complete!', 100, 100);

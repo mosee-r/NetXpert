@@ -27,8 +27,12 @@ val hasReleaseSigning = listOf(
 ).all { !it.isNullOrBlank() }
 
 val webProjectRoot = rootProject.projectDir.parentFile
+val packageVersion = ((groovy.json.JsonSlurper().parse(webProjectRoot.resolve("package.json")) as Map<*, *>)
+    ["version"] as? String) ?: throw GradleException("package.json must define a string version.")
+val releaseVersionName = providers.gradleProperty("releaseVersionName").orElse(packageVersion)
 val buildWebBundle = tasks.register<Exec>("buildWebBundle") {
     workingDir(webProjectRoot)
+    environment("VITE_APP_VERSION", releaseVersionName.get())
     if (System.getProperty("os.name").startsWith("Windows", ignoreCase = true)) {
         commandLine("cmd", "/c", "node node_modules/vite/bin/vite.js build")
     } else {
@@ -55,7 +59,7 @@ android {
         minSdk = 26
         targetSdk = 34
         versionCode = providers.gradleProperty("releaseVersionCode").orElse("1").get().toInt()
-        versionName = providers.gradleProperty("releaseVersionName").orElse("1.0").get()
+        versionName = releaseVersionName.get()
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
